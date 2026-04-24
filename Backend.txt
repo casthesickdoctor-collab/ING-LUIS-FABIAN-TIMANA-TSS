@@ -1,0 +1,52 @@
+// Este código debe ir en Google Apps Script (script.google.com)
+
+function doPost(e) {
+  try {
+    // 1. Recibir los datos enviados desde la App Web (React)
+    var data = JSON.parse(e.postData.contents);
+    
+    // 2. Buscar o Crear la carpeta Principal en tu Drive
+    var mainFolderName = "TSS_REPORTES_APP";
+    var mainFolder;
+    var folders = DriveApp.getFoldersByName(mainFolderName);
+    if (folders.hasNext()) {
+      mainFolder = folders.next();
+    } else {
+      mainFolder = DriveApp.createFolder(mainFolderName);
+    }
+    
+    // 3. Crear una subcarpeta para este sitio específico
+    var siteCode = data.infoSitio.codigoSitio || "NUEVO_SITIO";
+    var timestamp = Utilities.formatDate(new Date(), "GMT-5", "yyyy-MM-dd_HH-mm");
+    var siteFolder = mainFolder.createFolder("TSS_" + siteCode + "_" + timestamp);
+    
+    // 4. Guardar un resumen de datos en un archivo JSON (Puedes usar esto luego para llenar el Excel)
+    var resumen = "REPORTE DE SITIO: " + siteCode + "\n\n";
+    resumen += JSON.stringify(data.infoSitio, null, 2) + "\n\n";
+    resumen += "CONDICIONES:\n" + JSON.stringify(data.condiciones, null, 2);
+    siteFolder.createFile("Datos_TSS.txt", resumen, MimeType.PLAIN_TEXT);
+    
+    // 5. Procesar y guardar las Fotografías
+    if (data.fotos && data.fotos.length > 0) {
+      for (var i = 0; i < data.fotos.length; i++) {
+        var foto = data.fotos[i];
+        // Decodificar el archivo en Base64 a Binario (Imagen real)
+        var blob = Utilities.newBlob(Utilities.base64Decode(foto.data), foto.mimeType, foto.etiqueta + " - " + foto.nombre);
+        siteFolder.createFile(blob);
+      }
+    }
+    
+    // Responder a la App web que todo fue exitoso
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "success", 
+      "folderUrl": siteFolder.getUrl()
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch(err) {
+    // Manejo de errores
+    return ContentService.createTextOutput(JSON.stringify({
+      "status": "error", 
+      "message": err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}

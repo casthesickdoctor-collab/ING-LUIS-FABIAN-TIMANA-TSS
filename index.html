@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>App TSS - Reporte de Sitio v2.1</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- React y ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- SheetJS para Excel -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <style>
+        body { background-color: #f3f4f6; -webkit-tap-highlight-color: transparent; }
+        .tab-active { border-bottom: 2px solid #2563eb; color: #2563eb; font-weight: bold; }
+        .tab-inactive { color: #6b7280; }
+        input, select, textarea { 
+            width: 100%; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid #d1d5db; 
+            margin-top: 0.25rem; font-size: 14px; 
+        }
+        label { font-weight: 600; color: #374151; font-size: 0.75rem; text-transform: uppercase; }
+        .card-section { background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
+        .section-title { font-size: 1.125rem; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; }
+        
+        /* Ocultar barra de scroll en navegacion horizontal */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // Estructura de datos COMPLETA basada en V.2.1 PROVEEDOR
+        const initialData = {
+            infoSitio: {
+                ordenTrabajo: '', fecha: '', proyecto: 'TSS',
+                tecnico: '', empresa: '', telefono: '',
+                codigoSitio: '', codigoNetco: '', nombreSitio: '', direccion: '',
+                latitud: '', longitud: '', departamento: '', municipio: '', torrero: '', idTorrero: '',
+                ubicacionEstacion: '', ubicacionLlaves: '', tipoCandado: '', observacionAcceso: ''
+            },
+            condiciones: [
+                { categoria: '1. ACCESOS', items: [
+                    { id: '1.1', desc: 'PUERTAS Y PORTONES', estado: 'N/A', obs: '' },
+                    { id: '1.2', desc: 'CHAPAS O CANDADOS', estado: 'N/A', obs: '' },
+                    { id: '1.3', desc: 'ALARMAS', estado: 'N/A', obs: '' }
+                ]},
+                { categoria: '2. AREAS INTERIORES Y EXTERIORES', items: [
+                    { id: '2.1', desc: 'CAMINO DE ACCESO', estado: 'N/A', obs: '' },
+                    { id: '2.2', desc: 'REALIZAR LIMPIEZA EXTERIOR', estado: 'N/A', obs: '' },
+                    { id: '2.3', desc: 'REALIZAR LIMPIEZA INTERIOR', estado: 'N/A', obs: '' },
+                    { id: '2.4', desc: 'DESHIERBAR', estado: 'N/A', obs: '' },
+                    { id: '2.5', desc: 'RETIRO DE BASURA', estado: 'N/A', obs: '' },
+                    { id: '2.6', desc: 'ALAMBRE DE PUA O CONCERTINA', estado: 'N/A', obs: '' },
+                    { id: '2.7', desc: 'CONDICION Y NIVEL DE GRAVA', estado: 'N/A', obs: '' },
+                    { id: '2.8', desc: 'MUROS (INMUEBLE)', estado: 'N/A', obs: '' },
+                    { id: '2.9', desc: 'COLUMNA (INMUEBLE)', estado: 'N/A', obs: '' },
+                    { id: '2.10', desc: 'ESTRUCTURA METALICA Y VIGAS', estado: 'N/A', obs: '' },
+                    { id: '2.11', desc: 'SISTEMA GENERAL DE DRENAJE', estado: 'N/A', obs: '' },
+                    { id: '2.12', desc: 'IMPERMEABILIZACIÓN GENERAL (TERRAZA)', estado: 'N/A', obs: '' }
+                ]},
+                { categoria: '3. SISTEMA DE ILUMINACIÓN Y ELÉCTRICO GENERAL', items: [
+                    { id: '3.1', desc: 'FUNCIONAMIENTO DE LA LUZ DE OBSTRUCCIÓN', estado: 'N/A', obs: '' },
+                    { id: '3.2', desc: 'ESTADO DEL NICHO DE ACOMETIDA ELÉCTRICA', estado: 'N/A', obs: '' },
+                    { id: '3.3', desc: 'ESTADO DE ACOMETIDA HASTA EL TRANSFORMADOR', estado: 'N/A', obs: '' },
+                    { id: '3.4', desc: 'POSTE DE TRANSFORMADOR', estado: 'N/A', obs: '' },
+                    { id: '3.5', desc: 'ESTADO DEL CONTADOR', estado: 'N/A', obs: '' },
+                    { id: '3.6', desc: 'SISTEMA ELÉCTRICO Y CONEXIONES', estado: 'N/A', obs: '' },
+                    { id: '3.7', desc: 'ESTADO DEL TABLERO ELECTRICO', estado: 'N/A', obs: '' },
+                    { id: '3.8', desc: 'PROTECTORES DE SOBRETENSION', estado: 'N/A', obs: '' },
+                    { id: '3.9', desc: 'CONDICION CABLES Y TUBERIAS', estado: 'N/A', obs: '' },
+                    { id: '3.10', desc: 'SISTEMA DE ILUMINACION INTERIOR Y EXTERIOR', estado: 'N/A', obs: '' },
+                    { id: '3.11', desc: 'TOMAS CORRIENTE Y ENCHUFES', estado: 'N/A', obs: '' },
+                    { id: '3.12', desc: 'VENTILACION / AIRE ACONDICIONADO', estado: 'N/A', obs: '' }
+                ]}
+            ],
+            inventarioTorre: [],
+            inventarioPiso: [],
+            energia: {
+                electrificadora: '', nic: '', fases: '', diametroCable: '',
+                transformadorTipo: '', transformadorKw: '', transformadorMarca: '',
+                contadorBreaker: '', contadorA: '', contadorMarca: '',
+                plantaEstado: '', plantaModelo: '', plantaMarca: '', plantaSerial: '', plantaKw: '', plantaPropietario: '',
+                tgdBreaker: '', tgdA: '', tgdMarca: '', 
+                l1A: '', l2A: '', l3A: '',
+                l1nV: '', l2nV: '', l3nV: '',
+                l1l2V: '', l1l3V: '', l2l3V: ''
+            },
+            fotos: []
+        };
+
+        function App() {
+            const [activeTab, setActiveTab] = useState('info');
+            const [formData, setFormData] = useState(initialData);
+
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+
+            const handleChangeInfo = (field, value) => {
+                setFormData(prev => ({ ...prev, infoSitio: { ...prev.infoSitio, [field]: value } }));
+            };
+
+            const handleChangeEnergia = (field, value) => {
+                setFormData(prev => ({ ...prev, energia: { ...prev.energia, [field]: value } }));
+            };
+
+            // ---- EXPORTACIÓN A EXCEL ----
+            const exportToExcel = () => {
+                try {
+                    const wb = XLSX.utils.book_new();
+
+                    // 1. Info Sitio
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.infoSitio]), "Info Sitio");
+
+                    // 2. Condiciones
+                    const flatCondiciones = [];
+                    formData.condiciones.forEach(cat => {
+                        cat.items.forEach(item => flatCondiciones.push({ Categoria: cat.categoria, Item: item.id, Descripcion: item.desc, Estado: item.estado, Comentarios: item.obs }));
+                    });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatCondiciones), "Condiciones");
+
+                    // 3. Inventario Torre
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioTorre.length ? formData.inventarioTorre : [{ Estatus: 'Sin datos' }]), "Inv. Torre");
+
+                    // 4. Inventario Piso
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioPiso.length ? formData.inventarioPiso : [{ Estatus: 'Sin datos' }]), "Inv. Piso");
+
+                    // 5. Energia
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.energia]), "Energia");
+
+                    // 6. Fotos
+                    const fotosMetadata = formData.fotos.map(f => ({ Etiqueta: f.etiqueta, Archivo: f.name }));
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fotosMetadata), "Registro Fotografico");
+
+                    XLSX.writeFile(wb, `TSS_V2_${formData.infoSitio.codigoSitio || 'NUEVO'}.xlsx`);
+                } catch (error) {
+                    alert("Error al generar Excel. Revisa la consola.");
+                    console.error(error);
+                }
+            };
+
+            // ---- COMPONENTES DE PESTAÑAS ----
+
+            const TabInfoSitio = () => (
+                <div className="space-y-4">
+                    <div className="card-section">
+                        <h2 className="section-title">Información de Actividad</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div><label>O. de Trabajo</label><input type="text" value={formData.infoSitio.ordenTrabajo} onChange={(e) => handleChangeInfo('ordenTrabajo', e.target.value)} /></div>
+                            <div><label>Fecha TSS (DD/MM/AA)</label><input type="date" value={formData.infoSitio.fecha} onChange={(e) => handleChangeInfo('fecha', e.target.value)} /></div>
+                            <div><label>Proyecto</label><input type="text" value={formData.infoSitio.proyecto} onChange={(e) => handleChangeInfo('proyecto', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Realizado Por</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div><label>Nombre (Técnico / Ing)</label><input type="text" value={formData.infoSitio.tecnico} onChange={(e) => handleChangeInfo('tecnico', e.target.value)} /></div>
+                            <div><label>Empresa</label><input type="text" value={formData.infoSitio.empresa} onChange={(e) => handleChangeInfo('empresa', e.target.value)} /></div>
+                            <div><label>Número de Contacto</label><input type="tel" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Datos de la Radio Base Unired</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div><label>Código Sitio</label><input type="text" value={formData.infoSitio.codigoSitio} onChange={(e) => handleChangeInfo('codigoSitio', e.target.value)} /></div>
+                            <div><label>Código Netco</label><input type="text" value={formData.infoSitio.codigoNetco} onChange={(e) => handleChangeInfo('codigoNetco', e.target.value)} /></div>
+                            <div className="col-span-2"><label>Nombre del Sitio</label><input type="text" value={formData.infoSitio.nombreSitio} onChange={(e) => handleChangeInfo('nombreSitio', e.target.value)} /></div>
+                            <div className="col-span-2"><label>Dirección</label><input type="text" value={formData.infoSitio.direccion} onChange={(e) => handleChangeInfo('direccion', e.target.value)} /></div>
+                            <div><label>Latitud</label><input type="number" step="any" value={formData.infoSitio.latitud} onChange={(e) => handleChangeInfo('latitud', e.target.value)} /></div>
+                            <div><label>Longitud</label><input type="number" step="any" value={formData.infoSitio.longitud} onChange={(e) => handleChangeInfo('longitud', e.target.value)} /></div>
+                            <div><label>Departamento</label><input type="text" value={formData.infoSitio.departamento} onChange={(e) => handleChangeInfo('departamento', e.target.value)} /></div>
+                            <div><label>Municipio</label><input type="text" value={formData.infoSitio.municipio} onChange={(e) => handleChangeInfo('municipio', e.target.value)} /></div>
+                            <div><label>Torrero</label><input type="text" value={formData.infoSitio.torrero} onChange={(e) => handleChangeInfo('torrero', e.target.value)} /></div>
+                            <div><label>ID Torrero</label><input type="text" value={formData.infoSitio.idTorrero} onChange={(e) => handleChangeInfo('idTorrero', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Detalles de Acceso</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                            <div><label>Ubicación de Estación</label><input type="text" value={formData.infoSitio.ubicacionEstacion} onChange={(e) => handleChangeInfo('ubicacionEstacion', e.target.value)} /></div>
+                            <div><label>Ubicación de Llaves</label><input type="text" value={formData.infoSitio.ubicacionLlaves} onChange={(e) => handleChangeInfo('ubicacionLlaves', e.target.value)} /></div>
+                            <div><label>Tipo de Candado</label><input type="text" value={formData.infoSitio.tipoCandado} onChange={(e) => handleChangeInfo('tipoCandado', e.target.value)} /></div>
+                            <div className="col-span-1 md:col-span-3"><label>Contactos u Observación de Acceso</label><textarea rows="2" value={formData.infoSitio.observacionAcceso} onChange={(e) => handleChangeInfo('observacionAcceso', e.target.value)}></textarea></div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const TabCondiciones = () => {
+                const updateItem = (catIndex, itemIndex, field, value) => {
+                    const newCond = [...formData.condiciones];
+                    newCond[catIndex].items[itemIndex][field] = value;
+                    setFormData({ ...formData, condiciones: newCond });
+                };
+
+                return (
+                    <div className="space-y-4">
+                        {formData.condiciones.map((cat, catIdx) => (
+                            <div key={catIdx} className="card-section">
+                                <h2 className="section-title">{cat.categoria}</h2>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full text-sm text-left">
+                                        <thead className="bg-gray-100 uppercase text-xs">
+                                            <tr><th className="p-2 w-12">Item</th><th className="p-2">Descripción</th><th className="p-2 w-28">Estado</th><th className="p-2">Comentarios</th></tr>
+                                        </thead>
+                                        <tbody>
+                                            {cat.items.map((item, itemIdx) => (
+                                                <tr key={itemIdx} className="border-b">
+                                                    <td className="p-2 font-bold text-gray-500">{item.id}</td>
+                                                    <td className="p-2">{item.desc}</td>
+                                                    <td className="p-2">
+                                                        <select value={item.estado} onChange={(e) => updateItem(catIdx, itemIdx, 'estado', e.target.value)} className="mt-0 text-sm">
+                                                            <option value="N/A">N/A</option><option value="BUENO">BUENO</option><option value="MALO">MALO</option><option value="SI">SI</option><option value="NO">NO</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="p-2">
+                                                        <input type="text" placeholder="Obs..." value={item.obs} onChange={(e) => updateItem(catIdx, itemIdx, 'obs', e.target.value)} className="mt-0" />
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                );
+            };
+
+            const TabInventarioTorre = () => {
+                const addRow = () => setFormData(p => ({ ...p, inventarioTorre: [...p.inventarioTorre, { id: Date.now(), estatus: 'OPERATIVO', arista: 'A', tipo: '', fabricante: '', modelo: '', azimuth: '', altura: '', diametroMW: '', alto: '', ancho: '', prof: '', peso: '' }] }));
+                const updateRow = (id, field, value) => setFormData(p => ({ ...p, inventarioTorre: p.inventarioTorre.map(r => r.id === id ? { ...r, [field]: value } : r) }));
+                const deleteRow = (id) => setFormData(p => ({ ...p, inventarioTorre: p.inventarioTorre.filter(r => r.id !== id) }));
+
+                return (
+                    <div className="card-section">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
+                            <div>
+                                <h2 className="section-title !mb-0 border-0">Equipos en Torre (Carga)</h2>
+                                <p className="text-xs text-gray-500 max-w-xl mt-1">Llene Diámetro solo para antenas MW. Para RF, RRU y ODUs llene Alto, Ancho y Profundidad.</p>
+                            </div>
+                            <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-sm hover:bg-blue-200 shadow-sm whitespace-nowrap">+ Agregar Equipo</button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left whitespace-nowrap">
+                                <thead className="bg-gray-100 uppercase text-xs">
+                                    <tr>
+                                        <th className="p-2">Estatus</th><th className="p-2">Arista</th><th className="p-2">Tipo Elemento</th>
+                                        <th className="p-2">Fabricante</th><th className="p-2">Modelo</th><th className="p-2 w-16">Azimuth</th>
+                                        <th className="p-2 w-16">Alt (m)</th><th className="p-2 w-16">Diam MW</th>
+                                        <th className="p-2 w-16">Alto(m)</th><th className="p-2 w-16">Ancho(m)</th>
+                                        <th className="p-2 w-16">Prof(m)</th><th className="p-2 w-16">Peso</th><th className="p-2">Act</th>
+                                        </tr>
+                                </thead>
+                                <tbody>
+                                    {formData.inventarioTorre.length === 0 ? <tr><td colSpan="13" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
+                                    {formData.inventarioTorre.map((row) => (
+                                        <tr key={row.id} className="border-b hover:bg-gray-50">
+                                            <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs"><option>OPERATIVO</option><option>APAGADO</option></select></td>
+                                            <td className="p-1"><select value={row.arista} onChange={e => updateRow(row.id, 'arista', e.target.value)} className="mt-0 text-xs"><option>A</option><option>B</option><option>C</option><option>D</option></select></td>
+                                            <td className="p-1"><input type="text" placeholder="RF/MW/RRU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" placeholder="MW" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs bg-yellow-50" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
+
+            const TabInventarioPiso = () => {
+                const addRow = () => setFormData(p => ({ ...p, inventarioPiso: [...p.inventarioPiso, { id: Date.now(), estatus: 'OPERATIVO', operador: 'UNIRED', serial: '', tipo: '', fabricante: '', modelo: '', prof: '', ancho: '', area: '' }] }));
+                const updateRow = (id, field, value) => {
+                    setFormData(p => ({
+                        ...p, inventarioPiso: p.inventarioPiso.map(r => {
+                            if (r.id === id) {
+                                const newRow = { ...r, [field]: value };
+                                // Autocalcular Area si se cambian ancho o prof
+                                if (field === 'ancho' || field === 'prof') {
+                                    const a = parseFloat(field === 'ancho' ? value : newRow.ancho) || 0;
+                                    const pr = parseFloat(field === 'prof' ? value : newRow.prof) || 0;
+                                    newRow.area = (a * pr).toFixed(3);
+                                }
+                                return newRow;
+                            }
+                            return r;
+                        })
+                    }));
+                };
+                const deleteRow = (id) => setFormData(p => ({ ...p, inventarioPiso: p.inventarioPiso.filter(r => r.id !== id) }));
+
+                return (
+                    <div className="card-section">
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
+                            <h2 className="section-title !mb-0 border-0">Equipos en Piso (Áreas)</h2>
+                            <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-sm hover:bg-blue-200 shadow-sm whitespace-nowrap">+ Agregar Equipo</button>
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left whitespace-nowrap">
+                                <thead className="bg-gray-100 uppercase text-xs">
+                                    <tr>
+                                        <th className="p-2">Estatus</th><th className="p-2">Operador</th><th className="p-2">Serial</th>
+                                        <th className="p-2">Tipo Elemento</th><th className="p-2">Fabricante</th><th className="p-2">Modelo</th>
+                                        <th className="p-2 w-20">Prof(m)</th><th className="p-2 w-20">Ancho(m)</th>
+                                        <th className="p-2 w-20">Área m2</th><th className="p-2">Act</th>
+                                        </tr>
+                                </thead>
+                                <tbody>
+                                    {formData.inventarioPiso.length === 0 ? <tr><td colSpan="10" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
+                                    {formData.inventarioPiso.map((row) => (
+                                        <tr key={row.id} className="border-b hover:bg-gray-50">
+                                            <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs"><option>OPERATIVO</option><option>APAGADO</option></select></td>
+                                            <td className="p-1"><input type="text" value={row.operador} onChange={e => updateRow(row.id, 'operador', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" placeholder="RACK / BBU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" readOnly value={row.area} className="mt-0 text-xs bg-gray-100 font-bold" /></td>
+                                            <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
+
+            const TabEnergia = () => (
+                <div className="space-y-4">
+                    <div className="card-section">
+                        <h2 className="section-title">Energía AC</h2>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div><label>Electrificadora</label><input type="text" value={formData.energia.electrificadora} onChange={(e) => handleChangeEnergia('electrificadora', e.target.value)} /></div>
+                            <div><label>NIC o Nro Contador</label><input type="text" value={formData.energia.nic} onChange={(e) => handleChangeEnergia('nic', e.target.value)} /></div>
+                            <div><label>Número de Fases</label><select value={formData.energia.fases} onChange={(e) => handleChangeEnergia('fases', e.target.value)}><option value="">Seleccione</option><option value="Monofasico">1 (Monofásico)</option><option value="Bifasico">2 (Bifásico)</option><option value="Trifasico">3 (Trifásico)</option></select></div>
+                            <div><label>Diámetro Cable (mm2)</label><input type="text" value={formData.energia.diametroCable} onChange={(e) => handleChangeEnergia('diametroCable', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Transformador</h2>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div><label>Tipo</label><input type="text" placeholder="Ej: Trifásico" value={formData.energia.transformadorTipo} onChange={(e) => handleChangeEnergia('transformadorTipo', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.transformadorKw} onChange={(e) => handleChangeEnergia('transformadorKw', e.target.value)} /></div>
+                            <div><label>Marca</label><input type="text" value={formData.energia.transformadorMarca} onChange={(e) => handleChangeEnergia('transformadorMarca', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Contador</h2>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div><label>Tipo Breaker</label><input type="text" value={formData.energia.contadorBreaker} onChange={(e) => handleChangeEnergia('contadorBreaker', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
+                            <div><label>Marca</label><input type="text" value={formData.energia.contadorMarca} onChange={(e) => handleChangeEnergia('contadorMarca', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title">Motogenerador</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                            <div><label>Estado</label><select value={formData.energia.plantaEstado} onChange={(e) => handleChangeEnergia('plantaEstado', e.target.value)}><option value="">Seleccione</option><option>OPERATIVO</option><option>DAÑADO</option><option>NO TIENE</option></select></div>
+                            <div><label>Modelo</label><input type="text" value={formData.energia.plantaModelo} onChange={(e) => handleChangeEnergia('plantaModelo', e.target.value)} /></div>
+                            <div><label>Marca</label><input type="text" value={formData.energia.plantaMarca} onChange={(e) => handleChangeEnergia('plantaMarca', e.target.value)} /></div>
+                            <div><label>Serial</label><input type="text" value={formData.energia.plantaSerial} onChange={(e) => handleChangeEnergia('plantaSerial', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
+                            <div><label>Propietario</label><input type="text" value={formData.energia.plantaPropietario} onChange={(e) => handleChangeEnergia('plantaPropietario', e.target.value)} /></div>
+                        </div>
+                    </div>
+
+                    <div className="card-section">
+                        <h2 className="section-title text-green-700">Totalizador TGD y Mediciones</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 pb-4 border-b">
+                            <div><label>Tipo Breaker</label><input type="text" value={formData.energia.tgdBreaker} onChange={(e) => handleChangeEnergia('tgdBreaker', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
+                            <div><label>Marca</label><input type="text" value={formData.energia.tgdMarca} onChange={(e) => handleChangeEnergia('tgdMarca', e.target.value)} /></div>
+                        </div>
+                        
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
+                            
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L1-N</label><input type="number" step="any" value={formData.energia.l1nV} onChange={(e) => handleChangeEnergia('l1nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L2-N</label><input type="number" step="any" value={formData.energia.l2nV} onChange={(e) => handleChangeEnergia('l2nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L3-N</label><input type="number" step="any" value={formData.energia.l3nV} onChange={(e) => handleChangeEnergia('l3nV', e.target.value)} /></div>
+                            
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L2</label><input type="number" step="any" value={formData.energia.l1l2V} onChange={(e) => handleChangeEnergia('l1l2V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L3</label><input type="number" step="any" value={formData.energia.l1l3V} onChange={(e) => handleChangeEnergia('l1l3V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L2-L3</label><input type="number" step="any" value={formData.energia.l2l3V} onChange={(e) => handleChangeEnergia('l2l3V', e.target.value)} /></div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const TabFotografias = () => {
+                const handlePhotoUpload = (e) => {
+                    const files = Array.from(e.target.files);
+                    const newPhotos = files.map(file => ({ id: Date.now() + Math.random(), name: file.name, url: URL.createObjectURL(file), file: file, etiqueta: 'Panorámica de Sitio' }));
+                    setFormData({ ...formData, fotos: [...formData.fotos, ...newPhotos] });
+                };
+                const updatePhotoLabel = (id, newLabel) => setFormData({ ...formData, fotos: formData.fotos.map(p => p.id === id ? { ...p, etiqueta: newLabel } : p) });
+                const removePhoto = (id) => setFormData({ ...formData, fotos: formData.fotos.filter(p => p.id !== id) });
+
+                const photoCategories = [
+                    "Panorámica de Sitio", "Panorámica de Torre Arista A", "Panorámica de Torre Arista B", "Panorámica de Torre Arista C", "Panorámica de Torre Arista D",
+                    "Equipos Arista A", "Equipos Arista B", "Equipos Arista C", "Equipos Arista D",
+                    "Equipos Otros Operadores Arista A", "Equipos Otros Operadores Arista B", "Equipos Otros Operadores Arista C", "Equipos Otros Operadores Arista D",
+                    "Racks Cerrados Unired", "Rack Abierto 1", "Rack Abierto 2", "Rack Abierto 3", "Rack Abierto 4",
+                    "Batería 1", "Batería 2", "Batería 3", "Batería 4", "Batería 5", "Batería 6", "Batería 7", "Batería 8",
+                    "Tablero TGD", "Transformador", "Aterrizaje de Rack", "Barraje de Tierra"
+                ];
+
+                return (
+                    <div className="card-section">
+                        <h2 className="section-title">Registro Fotográfico</h2>
+                        <div className="relative border-2 border-dashed border-blue-400 rounded-lg p-6 text-center bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors">
+                            <input type="file" accept="image/*" capture="environment" multiple onChange={handlePhotoUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                            <i data-lucide="camera" className="mx-auto h-12 w-12 text-blue-500 mb-2"></i>
+                            <span className="font-semibold text-blue-600">Tocar para Cámara / Galería</span>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+                            {formData.fotos.map((foto) => (
+                                <div key={foto.id} className="border rounded-lg overflow-hidden relative shadow-sm">
+                                    <button onClick={() => removePhoto(foto.id)} className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 z-10 font-bold">X</button>
+                                    <img src={foto.url} alt={foto.name} className="w-full h-48 object-cover bg-gray-100" />
+                                    <div className="p-2">
+                                        <select value={foto.etiqueta} onChange={(e) => updatePhotoLabel(foto.id, e.target.value)} className="text-xs font-semibold w-full">
+                                            {photoCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                                        </select>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                );
+            };
+
+            const renderTab = () => {
+                switch(activeTab) {
+                    case 'info': return <TabInfoSitio />;
+                    case 'condiciones': return <TabCondiciones />;
+                    case 'torre': return <TabInventarioTorre />;
+                    case 'piso': return <TabInventarioPiso />;
+                    case 'energia': return <TabEnergia />;
+                    case 'fotos': return <TabFotografias />;
+                    default: return <TabInfoSitio />;
+                }
+            };
+
+            const navItems = [
+                { id: 'info', label: '1. Info' }, { id: 'condiciones', label: '2. Check' },
+                { id: 'torre', label: '3. Torre' }, { id: 'piso', label: '4. Piso' },
+                { id: 'energia', label: '5. Energía' }, { id: 'fotos', label: '6. Fotos' }
+            ];
+
+            return (
+                <div className="min-h-screen flex flex-col pb-16 md:pb-0">
+                    <header className="bg-blue-800 text-white p-3 shadow-md flex justify-between items-center sticky top-0 z-50">
+                        <div>
+                            <h1 className="font-bold leading-tight">TSS Digital V2.1</h1>
+                            <p className="text-xs text-blue-200">{formData.infoSitio.codigoSitio || 'Nuevo Sitio'}</p>
+                        </div>
+                        <button onClick={exportToExcel} className="bg-green-500 px-3 py-1.5 rounded font-bold text-sm shadow flex items-center gap-1 hover:bg-green-600 transition-colors">
+                            <i data-lucide="file-spreadsheet" className="w-4 h-4"></i> <span className="hidden sm:inline">Exportar a Excel</span>
+                        </button>
+                    </header>
+
+                    <nav className="bg-white shadow mb-4 px-2 overflow-x-auto no-scrollbar flex border-b whitespace-nowrap sticky top-[52px] z-40">
+                        {navItems.map(tab => (
+                            <button key={tab.id} onClick={() => setActiveTab(tab.id)} 
+                                className={`px-4 py-3 text-sm transition-colors ${activeTab === tab.id ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>
+                                {tab.label}
+                            </button>
+                        ))}
+                    </nav>
+
+                    <main className="flex-1 p-2 md:p-4 max-w-7xl mx-auto w-full">
+                        {renderTab()}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

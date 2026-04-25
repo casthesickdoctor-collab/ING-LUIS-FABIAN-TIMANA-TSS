@@ -126,35 +126,68 @@
             fotos: []
         };
 
-        // ---- COMPONENTE DEL LECTOR DE CÓDIGO DE BARRAS ----
+        // ---- COMPONENTE DEL LECTOR DE CÓDIGO DE BARRAS MEJORADO (V2) ----
         const BarcodeScannerModal = ({ onScan, onClose }) => {
+            const [errorMsg, setErrorMsg] = useState("");
+
             useEffect(() => {
-                const scanner = new Html5QrcodeScanner("reader", { 
-                    qrbox: { width: 250, height: 100 }, 
-                    fps: 10,
-                    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE ]
-                });
+                const html5QrCode = new Html5Qrcode("reader");
+                const config = { fps: 10, qrbox: { width: 250, height: 100 } };
                 
-                scanner.render((decodedText) => {
-                    onScan(decodedText);
-                    scanner.clear();
-                }, (error) => { /* Ignorar errores de lectura en proceso */ });
+                // Forzamos el uso directo de la cámara trasera
+                html5QrCode.start(
+                    { facingMode: "environment" }, 
+                    config,
+                    (decodedText) => {
+                        // 1. Reproducir un "BEEP" de éxito
+                        try {
+                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                            const osc = ctx.createOscillator();
+                            osc.type = 'square';
+                            osc.frequency.setValueAtTime(880, ctx.currentTime); // Frecuencia del Beep
+                            osc.connect(ctx.destination);
+                            osc.start();
+                            osc.stop(ctx.currentTime + 0.1);
+                        } catch(e) { console.log("Audio no soportado"); }
+
+                        // 2. Vibrar el celular si es posible
+                        if (navigator.vibrate) {
+                            navigator.vibrate(200);
+                        }
+
+                        // 3. Detener la cámara y enviar el texto
+                        html5QrCode.stop().then(() => {
+                            onScan(decodedText);
+                        }).catch(e => console.error("Error deteniendo escáner", e));
+                    },
+                    (errorMessage) => {
+                        // Ignoramos errores continuos mientras busca enfocar
+                    }
+                ).catch((err) => {
+                    setErrorMsg("Por favor, permite el acceso a la cámara en tu navegador.");
+                    console.error(err);
+                });
 
                 return () => {
-                    scanner.clear().catch(e => console.error("Error limpiando scanner", e));
+                    if (html5QrCode.isScanning) {
+                        html5QrCode.stop().catch(e => console.error("Error limpiando scanner", e));
+                    }
                 };
             }, []);
 
             return (
-                <div className="fixed inset-0 z-[100] bg-black bg-opacity-80 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="font-bold text-lg text-blue-800">Escanear Serial</h3>
-                            <button onClick={onClose} className="text-gray-500 font-bold text-xl">&times;</button>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2 text-center">Apunta la cámara al código de barras del equipo.</p>
-                        <div id="reader" className="w-full bg-gray-100 rounded overflow-hidden"></div>
-                        <button onClick={onClose} className="mt-4 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm">Cancelar</button>
+                <div className="fixed inset-0 z-[100] bg-black bg-opacity-90 flex flex-col items-center justify-center p-4">
+                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative">
+                        <h3 className="font-bold text-lg text-blue-800 text-center mb-2">Escaneando Serial...</h3>
+                        <p className="text-xs text-gray-500 mb-4 text-center">Apunta la cámara trasera al código de barras del equipo.</p>
+                        
+                        {errorMsg ? (
+                            <div className="bg-red-100 text-red-700 p-3 rounded text-sm text-center mb-4">{errorMsg}</div>
+                        ) : (
+                            <div id="reader" className="w-full bg-black rounded overflow-hidden mb-4 min-h-[250px]"></div>
+                        )}
+                        
+                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar / Cerrar</button>
                     </div>
                 </div>
             );
@@ -216,7 +249,7 @@
                     return newData;
                 });
                 
-                setScannerConfig(null);
+                setScannerConfig(null); // Cerrar el modal después de actualizar el dato
             };
 
             // ---- EXPORTACIÓN EXCEL ----

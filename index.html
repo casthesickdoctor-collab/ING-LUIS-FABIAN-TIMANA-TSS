@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>App TSS - Reporte de Sitio v2.1</title>
+    <title>App TSS - Reporte de Sitio v2.1 Completo</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y ReactDOM -->
@@ -15,6 +15,8 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <!-- SheetJS para Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Lector de Código de Barras Nativo -->
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
         body { background-color: #f3f4f6; -webkit-tap-highlight-color: transparent; }
@@ -22,27 +24,29 @@
         .tab-inactive { color: #6b7280; }
         input, select, textarea { 
             width: 100%; padding: 0.5rem; border-radius: 0.375rem; border: 1px solid #d1d5db; 
-            margin-top: 0.25rem; font-size: 14px; 
+            font-size: 14px; 
         }
-        label { font-weight: 600; color: #374151; font-size: 0.75rem; text-transform: uppercase; }
+        label { font-weight: 600; color: #374151; font-size: 0.75rem; text-transform: uppercase; margin-bottom: 0.25rem; display: block; }
         .card-section { background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 1rem; }
         .section-title { font-size: 1.125rem; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; }
-        
-        /* Ocultar barra de scroll en navegacion horizontal */
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Contenedor especial para input + boton escaner */
+        .input-group { display: flex; gap: 0.25rem; align-items: stretch; }
     </style>
 </head>
 <body>
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef } = React;
 
-        // Estructura de datos COMPLETA basada en V.2.1 PROVEEDOR
+        // Estructura de datos MILIMÉTRICA basada en V.2.1 PROVEEDOR
         const initialData = {
             infoSitio: {
-                ordenTrabajo: '', fecha: '', proyecto: 'TSS',
+                ordenTrabajo: '', fecha: '', proyecto: '',
+                sector1: '', sector2: '', sector3: '', sector4: '',
                 tecnico: '', empresa: '', telefono: '',
                 codigoSitio: '', codigoNetco: '', nombreSitio: '', direccion: '',
                 latitud: '', longitud: '', departamento: '', municipio: '', torrero: '', idTorrero: '',
@@ -85,6 +89,19 @@
             ],
             inventarioTorre: [],
             inventarioPiso: [],
+            tarjetas: [
+                { id: 'bbp1', tipo: 'BBP #1', marca: '', modelo: '', serial: '' },
+                { id: 'bbp2', tipo: 'BBP #2', marca: '', modelo: '', serial: '' },
+                { id: 'bbp3', tipo: 'BBP #3', marca: '', modelo: '', serial: '' },
+                { id: 'bbp4', tipo: 'BBP #4', marca: '', modelo: '', serial: '' },
+                { id: 'bbp5', tipo: 'BBP #5', marca: '', modelo: '', serial: '' },
+                { id: 'bbp6', tipo: 'BBP #6', marca: '', modelo: '', serial: '' },
+                { id: 'mpt1', tipo: 'MPT #1', marca: '', modelo: '', serial: '' },
+                { id: 'mpt2', tipo: 'MPT #2', marca: '', modelo: '', serial: '' },
+                { id: 'fan',  tipo: 'FAN', marca: '', modelo: '', serial: '' },
+                { id: 'upeu1', tipo: 'UPEU #1', marca: '', modelo: '', serial: '' },
+                { id: 'upeu2', tipo: 'UPEU #2', marca: '', modelo: '', serial: '' }
+            ],
             energia: {
                 electrificadora: '', nic: '', fases: '', diametroCable: '',
                 transformadorTipo: '', transformadorKw: '', transformadorMarca: '',
@@ -93,9 +110,54 @@
                 tgdBreaker: '', tgdA: '', tgdMarca: '', 
                 l1A: '', l2A: '', l3A: '',
                 l1nV: '', l2nV: '', l3nV: '',
-                l1l2V: '', l1l3V: '', l2l3V: ''
+                l1l2V: '', l1l3V: '', l2l3V: '',
+                pdbRegleta: '', corrienteTotal: '' // NUEVOS CAMPOS DETECTADOS
             },
+            materiales: [
+                { id: 'mat1', material: 'CORAZAS', cantidad: '', observaciones: '' },
+                { id: 'mat2', material: 'TERMINALES', cantidad: '', observaciones: '' },
+                { id: 'mat3', material: 'UNIONES', cantidad: '', observaciones: '' },
+                { id: 'mat4', material: 'BREAKER AC', cantidad: '', observaciones: '' },
+                { id: 'mat5', material: 'CABLE AC', cantidad: '', observaciones: '' },
+                { id: 'mat6', material: 'BREAKER DC', cantidad: '', observaciones: '' },
+                { id: 'mat7', material: 'ESTRUCTURAS', cantidad: '', observaciones: '' },
+                { id: 'mat8', material: 'MÁSTILES', cantidad: '', observaciones: '' }
+            ],
             fotos: []
+        };
+
+        // ---- COMPONENTE DEL LECTOR DE CÓDIGO DE BARRAS ----
+        const BarcodeScannerModal = ({ onScan, onClose }) => {
+            useEffect(() => {
+                const scanner = new Html5QrcodeScanner("reader", { 
+                    qrbox: { width: 250, height: 100 }, 
+                    fps: 10,
+                    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE ]
+                });
+                
+                scanner.render((decodedText) => {
+                    onScan(decodedText);
+                    scanner.clear();
+                }, (error) => { /* Ignorar errores de lectura en proceso */ });
+
+                return () => {
+                    scanner.clear().catch(e => console.error("Error limpiando scanner", e));
+                };
+            }, []);
+
+            return (
+                <div className="fixed inset-0 z-[100] bg-black bg-opacity-80 flex flex-col items-center justify-center p-4">
+                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="font-bold text-lg text-blue-800">Escanear Serial</h3>
+                            <button onClick={onClose} className="text-gray-500 font-bold text-xl">&times;</button>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2 text-center">Apunta la cámara al código de barras del equipo.</p>
+                        <div id="reader" className="w-full bg-gray-100 rounded overflow-hidden"></div>
+                        <button onClick={onClose} className="mt-4 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm">Cancelar</button>
+                    </div>
+                </div>
+            );
         };
 
         function App() {
@@ -103,84 +165,99 @@
             const [formData, setFormData] = useState(initialData);
             const [lastSaved, setLastSaved] = useState('');
             const [isInitialLoad, setIsInitialLoad] = useState(true);
+            const [scannerConfig, setScannerConfig] = useState(null); // { section, rowId, field }
 
-            // ---- EFECTO: Cargar datos guardados al abrir la app ----
+            // ---- EFECTOS LOCALES ----
             useEffect(() => {
-                const savedData = localStorage.getItem('tss_draft');
+                const savedData = localStorage.getItem('tss_draft_v21');
                 if (savedData) {
                     try {
                         setFormData(JSON.parse(savedData));
                         setLastSaved('Borrador recuperado');
-                    } catch (e) {
-                        console.error("Error cargando borrador", e);
-                    }
+                    } catch (e) {}
                 }
                 setIsInitialLoad(false);
                 if (window.lucide) window.lucide.createIcons();
             }, []);
 
-            // ---- EFECTO: Guardar datos automáticamente con cada cambio ----
             useEffect(() => {
                 if (!isInitialLoad) {
-                    localStorage.setItem('tss_draft', JSON.stringify(formData));
+                    localStorage.setItem('tss_draft_v21', JSON.stringify(formData));
                     const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                     setLastSaved(time);
                 }
             }, [formData, isInitialLoad]);
 
             const handleNewReport = () => {
-                if (confirm("¿Estás seguro de crear un NUEVO REPORTE? \nSe borrará la información actual de la pantalla para empezar de cero.")) {
+                if (confirm("¿Estás seguro de crear un NUEVO REPORTE? \nSe borrará la información actual para empezar de cero.")) {
                     setFormData(initialData);
-                    localStorage.removeItem('tss_draft');
+                    localStorage.removeItem('tss_draft_v21');
                     setLastSaved('Reporte Nuevo');
                     setActiveTab('info');
                 }
             };
 
-            const handleChangeInfo = (field, value) => {
-                setFormData(prev => ({ ...prev, infoSitio: { ...prev.infoSitio, [field]: value } }));
+            // ---- MANEJADORES DE DATOS ----
+            const handleChangeInfo = (field, value) => setFormData(p => ({ ...p, infoSitio: { ...p.infoSitio, [field]: value } }));
+            const handleChangeEnergia = (field, value) => setFormData(p => ({ ...p, energia: { ...p.energia, [field]: value } }));
+
+            // Manejador del Escáner
+            const handleScanResult = (decodedText) => {
+                if (!scannerConfig) return;
+                const { section, rowId, field } = scannerConfig;
+                
+                setFormData(p => {
+                    const newData = { ...p };
+                    if (section === 'tarjetas' || section === 'inventarioTorre' || section === 'inventarioPiso') {
+                        newData[section] = newData[section].map(r => r.id === rowId ? { ...r, [field]: decodedText } : r);
+                    } else if (section === 'energia') {
+                        newData.energia[field] = decodedText;
+                    }
+                    return newData;
+                });
+                
+                setScannerConfig(null);
             };
 
-            const handleChangeEnergia = (field, value) => {
-                setFormData(prev => ({ ...prev, energia: { ...prev.energia, [field]: value } }));
-            };
-
-            // ---- EXPORTACIÓN A EXCEL ----
+            // ---- EXPORTACIÓN EXCEL ----
             const exportToExcel = () => {
                 try {
                     const wb = XLSX.utils.book_new();
 
-                    // 1. Info Sitio
+                    // Info Sitio
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.infoSitio]), "Info Sitio");
 
-                    // 2. Condiciones
-                    const flatCondiciones = [];
-                    formData.condiciones.forEach(cat => {
-                        cat.items.forEach(item => flatCondiciones.push({ Categoria: cat.categoria, Item: item.id, Descripcion: item.desc, Estado: item.estado, Comentarios: item.obs }));
-                    });
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatCondiciones), "Condiciones");
+                    // Condiciones
+                    const flatCond = [];
+                    formData.condiciones.forEach(c => c.items.forEach(i => flatCond.push({ Categoria: c.categoria, Item: i.id, Descripcion: i.desc, Estado: i.estado, Comentarios: i.obs })));
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatCond), "Condiciones");
 
-                    // 3. Inventario Torre
+                    // Torre
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioTorre.length ? formData.inventarioTorre : [{ Estatus: 'Sin datos' }]), "Inv. Torre");
 
-                    // 4. Inventario Piso
+                    // Piso
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioPiso.length ? formData.inventarioPiso : [{ Estatus: 'Sin datos' }]), "Inv. Piso");
 
-                    // 5. Energia
+                    // Tarjetas BBU
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.tarjetas), "Tarjetas BBU");
+
+                    // Energia
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.energia]), "Energia");
 
-                    // 6. Fotos (Metadatos)
-                    const fotosMetadata = formData.fotos.map(f => ({ Etiqueta: f.etiqueta, Archivo: f.name }));
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fotosMetadata), "Registro Fotografico");
+                    // Propuesta Instalacion
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.materiales), "Propuesta Mat");
 
-                    XLSX.writeFile(wb, `TSS_V2_${formData.infoSitio.codigoSitio || 'NUEVO'}.xlsx`);
+                    // Fotos
+                    const fotosMeta = formData.fotos.map(f => ({ Etiqueta: f.etiqueta, Archivo: f.name }));
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fotosMeta), "Fotografico");
+
+                    XLSX.writeFile(wb, `TSS_${formData.infoSitio.codigoSitio || 'NUEVO'}.xlsx`);
                 } catch (error) {
-                    alert("Error al generar Excel. Revisa la consola.");
-                    console.error(error);
+                    alert("Error al generar Excel.");
                 }
             };
 
-            // ---- FUNCIONES DE RENDERIZADO DE PESTAÑAS (CORRECCIÓN DE PÉRDIDA DE FOCO) ----
+            // ---- RENDERIZADO DE PESTAÑAS ----
 
             const renderTabInfoSitio = () => (
                 <div className="space-y-4">
@@ -188,8 +265,15 @@
                         <h2 className="section-title">Información de Actividad</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label>O. de Trabajo</label><input type="text" value={formData.infoSitio.ordenTrabajo} onChange={(e) => handleChangeInfo('ordenTrabajo', e.target.value)} /></div>
-                            <div><label>Fecha TSS (DD/MM/AA)</label><input type="date" value={formData.infoSitio.fecha} onChange={(e) => handleChangeInfo('fecha', e.target.value)} /></div>
+                            <div><label>Fecha TSS</label><input type="date" value={formData.infoSitio.fecha} onChange={(e) => handleChangeInfo('fecha', e.target.value)} /></div>
                             <div><label>Proyecto</label><input type="text" value={formData.infoSitio.proyecto} onChange={(e) => handleChangeInfo('proyecto', e.target.value)} /></div>
+                        </div>
+                        <h3 className="font-bold text-gray-700 mt-4 mb-2 text-sm uppercase">Sectores / Bandas (Ej: 700, 850, 1900)</h3>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div><label>Sector 1</label><input type="text" value={formData.infoSitio.sector1} onChange={(e) => handleChangeInfo('sector1', e.target.value)} /></div>
+                            <div><label>Sector 2</label><input type="text" value={formData.infoSitio.sector2} onChange={(e) => handleChangeInfo('sector2', e.target.value)} /></div>
+                            <div><label>Sector 3</label><input type="text" value={formData.infoSitio.sector3} onChange={(e) => handleChangeInfo('sector3', e.target.value)} /></div>
+                            <div><label>Sector 4</label><input type="text" value={formData.infoSitio.sector4} onChange={(e) => handleChangeInfo('sector4', e.target.value)} /></div>
                         </div>
                     </div>
 
@@ -203,7 +287,7 @@
                     </div>
 
                     <div className="card-section">
-                        <h2 className="section-title">Datos de la Radio Base Unired</h2>
+                        <h2 className="section-title">Datos de la Radio Base</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div><label>Código Sitio</label><input type="text" value={formData.infoSitio.codigoSitio} onChange={(e) => handleChangeInfo('codigoSitio', e.target.value)} /></div>
                             <div><label>Código Netco</label><input type="text" value={formData.infoSitio.codigoNetco} onChange={(e) => handleChangeInfo('codigoNetco', e.target.value)} /></div>
@@ -224,7 +308,7 @@
                             <div><label>Ubicación de Estación</label><input type="text" value={formData.infoSitio.ubicacionEstacion} onChange={(e) => handleChangeInfo('ubicacionEstacion', e.target.value)} /></div>
                             <div><label>Ubicación de Llaves</label><input type="text" value={formData.infoSitio.ubicacionLlaves} onChange={(e) => handleChangeInfo('ubicacionLlaves', e.target.value)} /></div>
                             <div><label>Tipo de Candado</label><input type="text" value={formData.infoSitio.tipoCandado} onChange={(e) => handleChangeInfo('tipoCandado', e.target.value)} /></div>
-                            <div className="col-span-1 md:col-span-3"><label>Contactos u Observación de Acceso</label><textarea rows="2" value={formData.infoSitio.observacionAcceso} onChange={(e) => handleChangeInfo('observacionAcceso', e.target.value)}></textarea></div>
+                            <div className="col-span-1 md:col-span-3"><label>Contactos / Observación de Acceso</label><textarea rows="2" value={formData.infoSitio.observacionAcceso} onChange={(e) => handleChangeInfo('observacionAcceso', e.target.value)}></textarea></div>
                         </div>
                     </div>
                 </div>
@@ -241,10 +325,10 @@
                     <div className="space-y-4">
                         {formData.condiciones.map((cat, catIdx) => (
                             <div key={catIdx} className="card-section">
-                                <h2 className="section-title">{cat.categoria}</h2>
+                                <h2 className="section-title text-sm">{cat.categoria}</h2>
                                 <div className="overflow-x-auto">
                                     <table className="w-full text-sm text-left">
-                                        <thead className="bg-gray-100 uppercase text-xs">
+                                        <thead className="bg-gray-100 uppercase text-[10px]">
                                             <tr><th className="p-2 w-12">Item</th><th className="p-2">Descripción</th><th className="p-2 w-28">Estado</th><th className="p-2">Comentarios</th></tr>
                                         </thead>
                                         <tbody>
@@ -253,12 +337,12 @@
                                                     <td className="p-2 font-bold text-gray-500">{item.id}</td>
                                                     <td className="p-2">{item.desc}</td>
                                                     <td className="p-2">
-                                                        <select value={item.estado} onChange={(e) => updateItem(catIdx, itemIdx, 'estado', e.target.value)} className="mt-0 text-sm">
+                                                        <select value={item.estado} onChange={(e) => updateItem(catIdx, itemIdx, 'estado', e.target.value)} className="mt-0 py-1 px-2 text-xs">
                                                             <option value="N/A">N/A</option><option value="BUENO">BUENO</option><option value="MALO">MALO</option><option value="SI">SI</option><option value="NO">NO</option>
                                                         </select>
                                                     </td>
                                                     <td className="p-2">
-                                                        <input type="text" placeholder="Obs..." value={item.obs} onChange={(e) => updateItem(catIdx, itemIdx, 'obs', e.target.value)} className="mt-0" />
+                                                        <input type="text" placeholder="Obs..." value={item.obs} onChange={(e) => updateItem(catIdx, itemIdx, 'obs', e.target.value)} className="mt-0 py-1" />
                                                     </td>
                                                 </tr>
                                             ))}
@@ -278,42 +362,44 @@
 
                 return (
                     <div className="card-section">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
-                            <div>
-                                <h2 className="section-title !mb-0 border-0">Equipos en Torre (Carga)</h2>
-                                <p className="text-xs text-gray-500 max-w-xl mt-1">Llene Diámetro solo para antenas MW. Para RF, RRU y ODUs llene Alto, Ancho y Profundidad.</p>
-                            </div>
-                            <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-sm hover:bg-blue-200 shadow-sm whitespace-nowrap">+ Agregar Equipo</button>
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="section-title !mb-0 border-0">Equipos en Torre</h2>
+                            <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-xs">+ Agregar</button>
                         </div>
                         <div className="overflow-x-auto">
                             <table className="w-full text-sm text-left whitespace-nowrap">
-                                <thead className="bg-gray-100 uppercase text-xs">
+                                <thead className="bg-gray-100 uppercase text-[10px]">
                                     <tr>
-                                        <th className="p-2">Estatus</th><th className="p-2">Arista</th><th className="p-2">Tipo Elemento</th>
-                                        <th className="p-2">Fabricante</th><th className="p-2">Modelo</th><th className="p-2">Serial</th><th className="p-2 w-16">Azimuth</th>
-                                        <th className="p-2 w-16">Alt (m)</th><th className="p-2 w-16">Diam MW</th>
-                                        <th className="p-2 w-16">Alto(m)</th><th className="p-2 w-16">Ancho(m)</th>
-                                        <th className="p-2 w-16">Prof(m)</th><th className="p-2 w-16">Peso</th><th className="p-2">Act</th>
-                                        </tr>
+                                        <th className="p-2">Est.</th><th className="p-2">Aris</th><th className="p-2">Tipo</th>
+                                        <th className="p-2">Fabricante</th><th className="p-2">Modelo</th><th className="p-2 min-w-[150px]">Serial / Código</th>
+                                        <th className="p-2">Azm</th><th className="p-2">Alt(m)</th><th className="p-2">Dia MW</th>
+                                        <th className="p-2">H(m)</th><th className="p-2">W(m)</th><th className="p-2">D(m)</th><th className="p-2">Peso</th><th className="p-2">Act</th>
+                                    </tr>
                                 </thead>
                                 <tbody>
-                                    {formData.inventarioTorre.length === 0 ? <tr><td colSpan="14" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
                                     {formData.inventarioTorre.map((row) => (
                                         <tr key={row.id} className="border-b hover:bg-gray-50">
-                                            <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs"><option>OPERATIVO</option><option>APAGADO</option></select></td>
-                                            <td className="p-1"><select value={row.arista} onChange={e => updateRow(row.id, 'arista', e.target.value)} className="mt-0 text-xs"><option>A</option><option>B</option><option>C</option><option>D</option></select></td>
-                                            <td className="p-1"><input type="text" placeholder="RF/MW/RRU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" placeholder="MW" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs bg-yellow-50" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
+                                            <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs py-1"><option>OPERATIVO</option><option>APAGADO</option></select></td>
+                                            <td className="p-1"><select value={row.arista} onChange={e => updateRow(row.id, 'arista', e.target.value)} className="mt-0 text-xs py-1"><option>A</option><option>B</option><option>C</option><option>D</option></select></td>
+                                            <td className="p-1"><input type="text" placeholder="RF/MW" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
+                                            <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs py-1 w-20" /></td>
+                                            <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs py-1 w-24" /></td>
+                                            <td className="p-1">
+                                                <div className="input-group">
+                                                    <input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs py-1" />
+                                                    <button onClick={() => setScannerConfig({section: 'inventarioTorre', rowId: row.id, field: 'serial'})} className="bg-gray-200 px-2 rounded border border-gray-300">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v4"/><path d="M21 5v4"/><path d="M21 15v4"/><path d="M3 15v4"/><path d="M7 5h1"/><path d="M11 5h2"/><path d="M16 5h1"/><path d="M7 19h1"/><path d="M11 19h2"/><path d="M16 19h1"/><path d="M7 9v6"/><path d="M11 9v6"/><path d="M16 9v6"/></svg>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs py-1 w-14 bg-yellow-50" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-1 py-1">X</button></td>
                                         </tr>
                                     ))}
                                 </tbody>
@@ -331,9 +417,7 @@
                             if (r.id === id) {
                                 const newRow = { ...r, [field]: value };
                                 if (field === 'ancho' || field === 'prof') {
-                                    const a = parseFloat(field === 'ancho' ? value : newRow.ancho) || 0;
-                                    const pr = parseFloat(field === 'prof' ? value : newRow.prof) || 0;
-                                    newRow.area = (a * pr).toFixed(3);
+                                    newRow.area = ((parseFloat(field === 'ancho' ? value : newRow.ancho) || 0) * (parseFloat(field === 'prof' ? value : newRow.prof) || 0)).toFixed(3);
                                 }
                                 return newRow;
                             }
@@ -342,41 +426,72 @@
                     }));
                 };
                 const deleteRow = (id) => setFormData(p => ({ ...p, inventarioPiso: p.inventarioPiso.filter(r => r.id !== id) }));
+                
+                const updateTarjeta = (id, field, value) => {
+                    setFormData(p => ({ ...p, tarjetas: p.tarjetas.map(t => t.id === id ? { ...t, [field]: value } : t) }));
+                };
 
                 return (
-                    <div className="card-section">
-                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-2">
-                            <h2 className="section-title !mb-0 border-0">Equipos en Piso (Áreas)</h2>
-                            <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-sm hover:bg-blue-200 shadow-sm whitespace-nowrap">+ Agregar Equipo</button>
+                    <div className="space-y-4">
+                        <div className="card-section">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="section-title !mb-0 border-0">Equipos en Piso (Gabinete / Racks)</h2>
+                                <button onClick={addRow} className="bg-blue-100 text-blue-700 px-3 py-1.5 rounded font-bold text-xs">+ Agregar</button>
+                            </div>
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left whitespace-nowrap">
+                                    <thead className="bg-gray-100 uppercase text-[10px]">
+                                        <tr>
+                                            <th className="p-2">Est.</th><th className="p-2">Operador</th><th className="p-2">Tipo</th>
+                                            <th className="p-2 min-w-[150px]">Serial</th><th className="p-2">Fabricante</th><th className="p-2">Modelo</th>
+                                            <th className="p-2">Prof(m)</th><th className="p-2">Ancho(m)</th><th className="p-2">Área m2</th><th className="p-2">Act</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {formData.inventarioPiso.map((row) => (
+                                            <tr key={row.id} className="border-b hover:bg-gray-50">
+                                                <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs py-1"><option>OPERATIVO</option><option>APAGADO</option></select></td>
+                                                <td className="p-1"><input type="text" value={row.operador} onChange={e => updateRow(row.id, 'operador', e.target.value)} className="mt-0 text-xs py-1 w-20" /></td>
+                                                <td className="p-1"><input type="text" placeholder="RACK" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs py-1 w-20" /></td>
+                                                <td className="p-1">
+                                                    <div className="input-group">
+                                                        <input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs py-1" />
+                                                        <button onClick={() => setScannerConfig({section: 'inventarioPiso', rowId: row.id, field: 'serial'})} className="bg-gray-200 px-2 rounded border border-gray-300"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v4"/><path d="M21 5v4"/><path d="M21 15v4"/><path d="M3 15v4"/><path d="M7 5h1"/><path d="M11 5h2"/><path d="M16 5h1"/><path d="M7 19h1"/><path d="M11 19h2"/><path d="M16 19h1"/><path d="M7 9v6"/><path d="M11 9v6"/><path d="M16 9v6"/></svg></button>
+                                                    </div>
+                                                </td>
+                                                <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs py-1 w-20" /></td>
+                                                <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs py-1 w-24" /></td>
+                                                <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
+                                                <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
+                                                <td className="p-1"><input type="text" readOnly value={row.area} className="mt-0 text-xs py-1 bg-gray-100 font-bold w-16" /></td>
+                                                <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-1 py-1">X</button></td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
-                        <div className="overflow-x-auto">
-                            <table className="w-full text-sm text-left whitespace-nowrap">
-                                <thead className="bg-gray-100 uppercase text-xs">
-                                    <tr>
-                                        <th className="p-2">Estatus</th><th className="p-2">Operador</th><th className="p-2">Serial</th>
-                                        <th className="p-2">Tipo Elemento</th><th className="p-2">Fabricante</th><th className="p-2">Modelo</th>
-                                        <th className="p-2 w-20">Prof(m)</th><th className="p-2 w-20">Ancho(m)</th>
-                                        <th className="p-2 w-20">Área m2</th><th className="p-2">Act</th>
-                                        </tr>
-                                </thead>
-                                <tbody>
-                                    {formData.inventarioPiso.length === 0 ? <tr><td colSpan="10" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
-                                    {formData.inventarioPiso.map((row) => (
-                                        <tr key={row.id} className="border-b hover:bg-gray-50">
-                                            <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs"><option>OPERATIVO</option><option>APAGADO</option></select></td>
-                                            <td className="p-1"><input type="text" value={row.operador} onChange={e => updateRow(row.id, 'operador', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" placeholder="RACK / BBU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="text" readOnly value={row.area} className="mt-0 text-xs bg-gray-100 font-bold" /></td>
-                                            <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+
+                        {/* NUEVA SECCION DE TARJETAS */}
+                        <div className="card-section border-t-4 border-blue-500 mt-6">
+                            <h2 className="section-title">Inventario Interno de Tarjetas (BBU/Gabinete)</h2>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {formData.tarjetas.map(tarjeta => (
+                                    <div key={tarjeta.id} className="border p-3 rounded bg-gray-50 text-sm">
+                                        <h4 className="font-bold text-blue-800 border-b mb-2">{tarjeta.tipo}</h4>
+                                        <div className="mb-2"><label>Marca</label><input type="text" value={tarjeta.marca} onChange={e => updateTarjeta(tarjeta.id, 'marca', e.target.value)} className="py-1" /></div>
+                                        <div className="mb-2"><label>Modelo</label><input type="text" value={tarjeta.modelo} onChange={e => updateTarjeta(tarjeta.id, 'modelo', e.target.value)} className="py-1" /></div>
+                                        <div><label>Serial</label>
+                                            <div className="input-group">
+                                                <input type="text" value={tarjeta.serial} onChange={e => updateTarjeta(tarjeta.id, 'serial', e.target.value)} className="py-1" />
+                                                <button onClick={() => setScannerConfig({section: 'tarjetas', rowId: tarjeta.id, field: 'serial'})} className="bg-blue-100 text-blue-700 px-3 rounded border border-blue-300">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v4"/><path d="M21 5v4"/><path d="M21 15v4"/><path d="M3 15v4"/><path d="M7 5h1"/><path d="M11 5h2"/><path d="M16 5h1"/><path d="M7 19h1"/><path d="M11 19h2"/><path d="M16 19h1"/><path d="M7 9v6"/><path d="M11 9v6"/><path d="M16 9v6"/></svg>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 );
@@ -404,11 +519,12 @@
                     </div>
 
                     <div className="card-section">
-                        <h2 className="section-title">Contador</h2>
-                        <div className="grid grid-cols-3 gap-3">
+                        <h2 className="section-title">Contador & PDB</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.contadorBreaker} onChange={(e) => handleChangeEnergia('contadorBreaker', e.target.value)} /></div>
                             <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
-                            <div><label>Marca</label><input type="text" value={formData.energia.contadorMarca} onChange={(e) => handleChangeEnergia('contadorMarca', e.target.value)} /></div>
+                            <div><label>Marca Contador</label><input type="text" value={formData.energia.contadorMarca} onChange={(e) => handleChangeEnergia('contadorMarca', e.target.value)} /></div>
+                            <div><label>PDB / Regleta Break</label><input type="text" value={formData.energia.pdbRegleta} onChange={(e) => handleChangeEnergia('pdbRegleta', e.target.value)} /></div>
                         </div>
                     </div>
 
@@ -418,7 +534,12 @@
                             <div><label>Estado</label><select value={formData.energia.plantaEstado} onChange={(e) => handleChangeEnergia('plantaEstado', e.target.value)}><option value="">Seleccione</option><option>OPERATIVO</option><option>DAÑADO</option><option>NO TIENE</option></select></div>
                             <div><label>Modelo</label><input type="text" value={formData.energia.plantaModelo} onChange={(e) => handleChangeEnergia('plantaModelo', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.plantaMarca} onChange={(e) => handleChangeEnergia('plantaMarca', e.target.value)} /></div>
-                            <div><label>Serial</label><input type="text" value={formData.energia.plantaSerial} onChange={(e) => handleChangeEnergia('plantaSerial', e.target.value)} /></div>
+                            <div><label>Serial</label>
+                                <div className="input-group">
+                                    <input type="text" value={formData.energia.plantaSerial} onChange={(e) => handleChangeEnergia('plantaSerial', e.target.value)} />
+                                    <button onClick={() => setScannerConfig({section: 'energia', field: 'plantaSerial'})} className="bg-gray-200 px-2 rounded border border-gray-300"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v4"/><path d="M21 5v4"/><path d="M21 15v4"/><path d="M3 15v4"/><path d="M7 5h1"/><path d="M11 5h2"/><path d="M16 5h1"/><path d="M7 19h1"/><path d="M11 19h2"/><path d="M16 19h1"/><path d="M7 9v6"/><path d="M11 9v6"/><path d="M16 9v6"/></svg></button>
+                                </div>
+                            </div>
                             <div><label>Capacidad (KW)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
                             <div><label>Propietario</label><input type="text" value={formData.energia.plantaPropietario} onChange={(e) => handleChangeEnergia('plantaPropietario', e.target.value)} /></div>
                         </div>
@@ -426,13 +547,14 @@
 
                     <div className="card-section">
                         <h2 className="section-title text-green-700">Totalizador TGD y Mediciones</h2>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 pb-4 border-b">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-4 border-b">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.tgdBreaker} onChange={(e) => handleChangeEnergia('tgdBreaker', e.target.value)} /></div>
                             <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.tgdMarca} onChange={(e) => handleChangeEnergia('tgdMarca', e.target.value)} /></div>
+                            <div><label>Corriente Total (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.corrienteTotal} onChange={(e) => handleChangeEnergia('corrienteTotal', e.target.value)} className="bg-yellow-50" /></div>
                         </div>
                         
-                        <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="grid grid-cols-3 gap-2 text-center text-sm">
                             <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
                             <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
                             <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
@@ -449,6 +571,36 @@
                 </div>
             );
 
+            // ---- NUEVA PESTAÑA: MATERIALES (PROPUESTA INSTALACIÓN) ----
+            const renderTabMateriales = () => {
+                const updateMaterial = (id, field, value) => {
+                    setFormData(p => ({ ...p, materiales: p.materiales.map(m => m.id === id ? { ...m, [field]: value } : m) }));
+                };
+
+                return (
+                    <div className="card-section">
+                        <h2 className="section-title">Propuesta de Instalación (BOM / Materiales)</h2>
+                        <p className="text-sm text-gray-500 mb-4">Ingrese las cantidades requeridas de cada material para la materialización de la obra.</p>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-gray-100 uppercase text-xs">
+                                    <tr><th className="p-2 w-1/3">Material</th><th className="p-2 w-24">Cantidad</th><th className="p-2">Observaciones</th></tr>
+                                </thead>
+                                <tbody>
+                                    {formData.materiales.map((mat) => (
+                                        <tr key={mat.id} className="border-b">
+                                            <td className="p-2 font-bold text-gray-700">{mat.material}</td>
+                                            <td className="p-2"><input type="number" inputMode="decimal" value={mat.cantidad} onChange={(e) => updateMaterial(mat.id, 'cantidad', e.target.value)} className="mt-0 py-1" /></td>
+                                            <td className="p-2"><input type="text" placeholder="Especificaciones, calibres, etc..." value={mat.observaciones} onChange={(e) => updateMaterial(mat.id, 'observaciones', e.target.value)} className="mt-0 py-1" /></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                );
+            };
+
             const renderTabFotografias = () => {
                 const handlePhotoUpload = (e) => {
                     const files = Array.from(e.target.files);
@@ -459,6 +611,7 @@
                 const removePhoto = (id) => setFormData({ ...formData, fotos: formData.fotos.filter(p => p.id !== id) });
 
                 const photoCategories = [
+                    "Plano del Sitio (Sketch)", "Plano Antenas Instaladas",
                     "Panorámica de Sitio", "Panorámica de Torre Arista A", "Panorámica de Torre Arista B", "Panorámica de Torre Arista C", "Panorámica de Torre Arista D",
                     "Equipos Arista A", "Equipos Arista B", "Equipos Arista C", "Equipos Arista D",
                     "Equipos Otros Operadores Arista A", "Equipos Otros Operadores Arista B", "Equipos Otros Operadores Arista C", "Equipos Otros Operadores Arista D",
@@ -469,7 +622,7 @@
 
                 return (
                     <div className="card-section">
-                        <h2 className="section-title">Registro Fotográfico</h2>
+                        <h2 className="section-title">Registro Fotográfico y Planos</h2>
                         <div className="relative border-2 border-dashed border-blue-400 rounded-lg p-6 text-center bg-blue-50 cursor-pointer hover:bg-blue-100 transition-colors">
                             <input type="file" accept="image/*" capture="environment" multiple onChange={handlePhotoUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
                             <i data-lucide="camera" className="mx-auto h-12 w-12 text-blue-500 mb-2"></i>
@@ -499,6 +652,7 @@
                     case 'torre': return renderTabInventarioTorre();
                     case 'piso': return renderTabInventarioPiso();
                     case 'energia': return renderTabEnergia();
+                    case 'materiales': return renderTabMateriales();
                     case 'fotos': return renderTabFotografias();
                     default: return renderTabInfoSitio();
                 }
@@ -506,8 +660,9 @@
 
             const navItems = [
                 { id: 'info', label: '1. Info' }, { id: 'condiciones', label: '2. Check' },
-                { id: 'torre', label: '3. Torre' }, { id: 'piso', label: '4. Piso' },
-                { id: 'energia', label: '5. Energía' }, { id: 'fotos', label: '6. Fotos' }
+                { id: 'torre', label: '3. Torre' }, { id: 'piso', label: '4. Piso/Tarjetas' },
+                { id: 'energia', label: '5. Energía' }, { id: 'materiales', label: '6. Materiales' },
+                { id: 'fotos', label: '7. Fotos/Planos' }
             ];
 
             return (
@@ -517,7 +672,7 @@
                             <h1 className="font-bold leading-tight">TSS Digital V2.1</h1>
                             <div className="flex items-center gap-1 text-xs text-blue-200">
                                 <span>{formData.infoSitio.codigoSitio || 'Nuevo Sitio'}</span>
-                                {lastSaved && <span className="ml-2 px-1.5 py-0.5 bg-blue-700 rounded shadow-inner">Guardado: {lastSaved}</span>}
+                                {lastSaved && <span className="ml-2 px-1.5 py-0.5 bg-blue-700 rounded shadow-inner hidden sm:inline">Guardado: {lastSaved}</span>}
                             </div>
                         </div>
                         <div className="flex gap-2">
@@ -542,6 +697,8 @@
                     <main className="flex-1 p-2 md:p-4 max-w-7xl mx-auto w-full">
                         {renderTab()}
                     </main>
+
+                    {scannerConfig && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setScannerConfig(null)} />}
                 </div>
             );
         }

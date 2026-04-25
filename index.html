@@ -126,42 +126,35 @@
             fotos: []
         };
 
-        // ---- COMPONENTE DEL LECTOR DE CÓDIGO DE BARRAS MEJORADO (V2) ----
+        // ---- COMPONENTE ESCÁNER CORREGIDO Y SEGURO ----
         const BarcodeScannerModal = ({ onScan, onClose }) => {
             const [errorMsg, setErrorMsg] = useState("");
+            const html5QrCodeRef = useRef(null);
 
             useEffect(() => {
-                const html5QrCode = new Html5Qrcode("reader");
-                const config = { fps: 10, qrbox: { width: 250, height: 100 } };
+                // Instanciar el lector de forma segura
+                html5QrCodeRef.current = new Html5Qrcode("reader");
                 
-                html5QrCode.start(
+                html5QrCodeRef.current.start(
                     { facingMode: "environment" }, 
-                    config,
+                    { fps: 10, qrbox: { width: 280, height: 120 } }, // Area más ancha para seriales
                     (decodedText) => {
-                        try {
-                            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                            const osc = ctx.createOscillator();
-                            osc.type = 'square';
-                            osc.frequency.setValueAtTime(880, ctx.currentTime);
-                            osc.connect(ctx.destination);
-                            osc.start();
-                            osc.stop(ctx.currentTime + 0.1);
-                        } catch(e) { }
-
-                        if (navigator.vibrate) navigator.vibrate(200);
-
-                        html5QrCode.stop().then(() => {
-                            onScan(decodedText);
-                        });
+                        if (navigator.vibrate) navigator.vibrate(200); // Vibración de éxito
+                        
+                        // Solo enviamos el texto. El desmontaje (y el stop de la cámara) se hace en el useEffect cleanup
+                        onScan(decodedText);
                     },
-                    (errorMessage) => {}
+                    (errorMessage) => {
+                        // Ignoramos advertencias de que no encuentra el código aún
+                    }
                 ).catch((err) => {
-                    setErrorMsg("Por favor, permite el acceso a la cámara en tu navegador.");
+                    setErrorMsg("Permite el acceso a la cámara y asegúrate de usar HTTPS.");
                 });
 
+                // Función de limpieza profunda al desmontar (evita crash)
                 return () => {
-                    if (html5QrCode.isScanning) {
-                        html5QrCode.stop().catch(e => console.error("Error limpiando scanner", e));
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().catch(e => console.error("Cierre seguro", e));
                     }
                 };
             }, []);
@@ -170,7 +163,7 @@
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-90 flex flex-col items-center justify-center p-4">
                     <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative">
                         <h3 className="font-bold text-lg text-blue-800 text-center mb-2">Escaneando Serial...</h3>
-                        <p className="text-xs text-gray-500 mb-4 text-center">Apunta la cámara trasera al código de barras del equipo.</p>
+                        <p className="text-xs text-gray-500 mb-4 text-center">Mantén la cámara a 15cm del código de barras para enfocar correctamente.</p>
                         
                         {errorMsg ? (
                             <div className="bg-red-100 text-red-700 p-3 rounded text-sm text-center mb-4">{errorMsg}</div>
@@ -178,13 +171,13 @@
                             <div id="reader" className="w-full bg-black rounded overflow-hidden mb-4 min-h-[250px]"></div>
                         )}
                         
-                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar / Cerrar</button>
+                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar</button>
                     </div>
                 </div>
             );
         };
 
-        // ---- COMPONENTE MODAL PARA LISTAR SITIOS GUARDADOS ----
+        // ---- MODAL SITIOS GUARDADOS ----
         const SavedSitesModal = ({ sites, onLoadSite, onDeleteSite, onClose }) => {
             return (
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-70 flex flex-col items-center justify-center p-4">
@@ -223,19 +216,14 @@
             const [isInitialLoad, setIsInitialLoad] = useState(true);
             const [scannerConfig, setScannerConfig] = useState(null);
             
-            // Estado para el gestor de sitios
             const [savedSitesList, setSavedSitesList] = useState([]);
             const [showSavedModal, setShowSavedModal] = useState(false);
 
-            // ---- EFECTOS LOCALES ----
+            // Carga inicial
             useEffect(() => {
-                // Cargar lista de sitios
                 const list = localStorage.getItem('tss_saved_sites_list');
-                if (list) {
-                    try { setSavedSitesList(JSON.parse(list)); } catch (e) {}
-                }
+                if (list) { try { setSavedSitesList(JSON.parse(list)); } catch (e) {} }
 
-                // Cargar borrador actual
                 const savedData = localStorage.getItem('tss_draft_v21');
                 if (savedData) {
                     try {
@@ -247,6 +235,7 @@
                 if (window.lucide) window.lucide.createIcons();
             }, []);
 
+            // Autoguardado
             useEffect(() => {
                 if (!isInitialLoad) {
                     localStorage.setItem('tss_draft_v21', JSON.stringify(formData));
@@ -255,30 +244,27 @@
                 }
             }, [formData, isInitialLoad]);
 
-            // ---- GESTION DE SITIOS (BASE DE DATOS LOCAL) ----
+            // Base de Datos
             const handleSaveCurrentSite = () => {
                 const codigo = formData.infoSitio.codigoSitio.trim();
-                if (!codigo) {
-                    alert("Por favor, ingresa al menos un 'Código de Sitio' en la pestaña 1 para poder guardar el reporte.");
-                    return;
-                }
+                if (!codigo) { alert("Por favor ingresa un 'Código de Sitio' en la pestaña 1 para guardar."); return; }
 
                 const newSite = {
-                    id: codigo + '_' + Date.now(), // ID Unico
+                    id: codigo + '_' + Date.now(),
                     codigo: codigo,
                     nombre: formData.infoSitio.nombreSitio || 'Sin Nombre',
                     fechaGuardado: new Date().toLocaleString(),
                     data: formData
                 };
 
-                const updatedList = [newSite, ...savedSitesList.filter(s => s.codigo !== codigo)]; // Reemplaza si tiene el mismo codigo
+                const updatedList = [newSite, ...savedSitesList.filter(s => s.codigo !== codigo)];
                 setSavedSitesList(updatedList);
                 localStorage.setItem('tss_saved_sites_list', JSON.stringify(updatedList));
-                alert(`¡El sitio ${codigo} ha sido guardado exitosamente en el dispositivo!`);
+                alert(`¡Sitio ${codigo} guardado exitosamente en el dispositivo!`);
             };
 
             const handleLoadSite = (site) => {
-                if (confirm(`¿Cargar los datos del sitio ${site.codigo}? Lo que tengas actualmente sin guardar se perderá.`)) {
+                if (confirm(`¿Cargar datos del sitio ${site.codigo}? Lo no guardado se perderá.`)) {
                     setFormData(site.data);
                     setShowSavedModal(false);
                     setActiveTab('info');
@@ -295,7 +281,7 @@
             };
 
             const handleNewReport = () => {
-                if (confirm("¿Estás seguro de crear un NUEVO REPORTE? \nAsegúrate de haber guardado el actual si lo necesitas.")) {
+                if (confirm("¿Estás seguro de crear un NUEVO REPORTE? \nAsegúrate de guardar el actual.")) {
                     setFormData(initialData);
                     localStorage.removeItem('tss_draft_v21');
                     setLastSaved('Reporte Nuevo');
@@ -303,7 +289,7 @@
                 }
             };
 
-            // ---- MANEJADORES DE DATOS ----
+            // Manejadores
             const handleChangeInfo = (field, value) => setFormData(p => ({ ...p, infoSitio: { ...p.infoSitio, [field]: value } }));
             const handleChangeEnergia = (field, value) => setFormData(p => ({ ...p, energia: { ...p.energia, [field]: value } }));
 
@@ -322,78 +308,128 @@
                 setScannerConfig(null);
             };
 
-            // ---- EXPORTACIÓN EXCEL "PIXEL PERFECT" ----
+            // =========================================================================
+            // MOTOR DE EXPORTACIÓN EXCEL "PIXEL PERFECT"
+            // Recrea fila por fila las pestañas del documento V.2.1
+            // =========================================================================
             const exportToExcel = () => {
                 try {
                     const wb = XLSX.utils.book_new();
 
-                    // =========================================================================
-                    // 1. HOJA: INFORMACION DE SITIO (Estructura Exacta a la Plantilla CSV)
-                    // =========================================================================
+                    // --- 1. HOJA: INFORMACION DE SITIO ---
                     const wsInfoData = [
-                        ["", "FORMATO TSS - AREAS Y ENERGIA"],
-                        [],[],[],[],
-                        ["", "", "INFORMACIÓN DE ACTIVIDAD"],
-                        [],
-                        ["", "", "", "ORDEN DE TRABAJO", "", "", "FECHA DE TSS DD/MM/AA", formData.infoSitio.fecha],
-                        [],
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [],
+                        ["", "", "INFORMACIÓN DE ACTIVIDAD"], [],
+                        ["", "", "", "ORDEN DE TRABAJO", "", "", "FECHA DE TSS DD/MM/AA", formData.infoSitio.fecha], [],
                         ["", "", "", "PROYECTO", formData.infoSitio.proyecto, "", "", "ESCENARIO", "SECTOR 1", formData.infoSitio.sector1],
                         ["", "", "", "", "", "", "", "", "", "SECTOR 2", formData.infoSitio.sector2],
                         ["", "", "", "", "", "", "", "", "", "SECTOR 3", formData.infoSitio.sector3],
-                        ["", "", "", "", "", "", "", "", "", "SECTOR 4", formData.infoSitio.sector4],
-                        [],
+                        ["", "", "", "", "", "", "", "", "", "SECTOR 4", formData.infoSitio.sector4], [],
                         ["", "", "REALIZADO POR"],
                         ["", "", "NOMBRE (TECNICO / INGENIERO)", "", "", "", "", "EMPRESA", "", "NUMERO DE CONTACTO"],
                         ["", "", formData.infoSitio.tecnico, "", "", "", "", formData.infoSitio.empresa, "", formData.infoSitio.telefono],
-                        [],[],[],
-                        ["", "", "DATOS DE LA RADIO BASE UNIRED"],
-                        [],
+                        [], [], [],
+                        ["", "", "DATOS DE LA RADIO BASE UNIRED"], [],
                         ["", "", "CODIGO DEL SITIO"],
-                        ["", "", formData.infoSitio.codigoSitio],
-                        [],
+                        ["", "", formData.infoSitio.codigoSitio], [],
                         ["", "", "CODIGO NETCO", "", "", "", "NOMBRE DEL SITIO", "", "", "DIRECCION"],
-                        ["", "", formData.infoSitio.codigoNetco, "", "", "", formData.infoSitio.nombreSitio, "", "", formData.infoSitio.direccion],
-                        [],
+                        ["", "", formData.infoSitio.codigoNetco, "", "", "", formData.infoSitio.nombreSitio, "", "", formData.infoSitio.direccion], [],
                         ["", "", "LATITUD", "", "", "", "LONGITUD", "", "", "DEPARTAMENTO"],
-                        ["", "", formData.infoSitio.latitud, "", "", "", formData.infoSitio.longitud, "", "", formData.infoSitio.departamento],
-                        [],
+                        ["", "", formData.infoSitio.latitud, "", "", "", formData.infoSitio.longitud, "", "", formData.infoSitio.departamento], [],
                         ["", "", "MUNICIPIO", "", "", "", "TORRERO", "", "", "ID TORRERO"],
-                        ["", "", formData.infoSitio.municipio, "", "", "", formData.infoSitio.torrero, "", "", formData.infoSitio.idTorrero],
-                        [],
+                        ["", "", formData.infoSitio.municipio, "", "", "", formData.infoSitio.torrero, "", "", formData.infoSitio.idTorrero], [],
                         ["", "", "UBICACIÓN DE ESTACION", "", "", "", "UBICACIÓN DE LLAVES", "", "", "TIPO DE CANDADO"],
-                        ["", "", formData.infoSitio.ubicacionEstacion, "", "", "", formData.infoSitio.ubicacionLlaves, "", "", formData.infoSitio.tipoCandado],
-                        [],
+                        ["", "", formData.infoSitio.ubicacionEstacion, "", "", "", formData.infoSitio.ubicacionLlaves, "", "", formData.infoSitio.tipoCandado], [],
                         ["", "", "CONTACTOS U OBSERVACION DE ACCESO"],
                         ["", "", formData.infoSitio.observacionAcceso]
                     ];
-                    const wsInfo = XLSX.utils.aoa_to_sheet(wsInfoData);
-                    XLSX.utils.book_append_sheet(wb, wsInfo, "INFORMACION DE SITIO");
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsInfoData), "INFORMACION DE SITIO");
 
-                    // =========================================================================
-                    // 2. HOJA: CONDICIONES (Estructura Simple)
-                    // =========================================================================
-                    const flatCond = [];
-                    formData.condiciones.forEach(c => c.items.forEach(i => flatCond.push({ Categoria: c.categoria, Item: i.id, Descripcion: i.desc, Estado: i.estado, Comentarios: i.obs })));
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(flatCond), "CONDICIONES DEL SITIO");
+                    // --- 2. HOJA: CONDICIONES DEL SITIO ---
+                    let wsCondData = [
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [], [],
+                        ["", "INSPECCIÓN GENERAL"],
+                        ["", "ITEM", "", "DESCRIPCIÓN", "", "", "", "", "", "", "", "", "", "", "", "", "", "CHECK", "", "", "COMENTARIOS"]
+                    ];
+                    formData.condiciones.forEach((cat) => {
+                        wsCondData.push(["", cat.categoria]);
+                        cat.items.forEach((item) => {
+                            wsCondData.push(["", item.id, "", item.desc, "", "", "", "", "", "", "", "", "", "", "", "", "", item.estado, "", "", item.obs]);
+                        });
+                    });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsCondData), "CONDICIONES DEL SITIO");
 
-                    // 3. Torre
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioTorre.length ? formData.inventarioTorre : [{ Estatus: 'Sin datos' }]), "INVENTARIO TORRE");
+                    // --- 3. HOJA: INVENTARIO TORRE ---
+                    let wsTorreData = [
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [],
+                        ["", "FORMATO UNICO CARGA EN TORRE"], [], [], [], [],
+                        ["", "", "ELEMENTOS EXISTENTES EN TORRE"],
+                        ["", "", "ESTATUS", "ARISTA", "TIPO DE EQUIPAMIENTO", "FABRICANTE", "MODELO", "SERIAL / CODIGO DE BARRAS", "AZIMUTH", "ALTURA ANTENA (MTS)", "DIMENSIONES EQUIPOS (MTS) (Diametro MW )", "DIMENSIONES EQUIPOS (MTS) (Alto)", "DIMENSIONES EQUIPOS (MTS) (Ancho)", "DIMENSIONES EQUIPOS (MTS) (Profundidad)", "PESO (KG)"]
+                    ];
+                    if(formData.inventarioTorre.length === 0) wsTorreData.push(["", "", "Sin Datos"]);
+                    formData.inventarioTorre.forEach(r => {
+                        wsTorreData.push(["", "", r.estatus, r.arista, r.tipo, r.fabricante, r.modelo, r.serial, r.azimuth, r.altura, r.diametroMW, r.alto, r.ancho, r.prof, r.peso]);
+                    });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsTorreData), "INVENTARIO TORRE");
 
-                    // 4. Piso
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.inventarioPiso.length ? formData.inventarioPiso : [{ Estatus: 'Sin datos' }]), "INVENTARIO PISO");
+                    // --- 4. HOJA: INVENTARIO PISO ---
+                    let wsPisoData = [
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [],
+                        ["", "FORMATO UNICO DE AREAS OCUPADAS EN PISO"], [], [],
+                        ["", "", "ELEMENTOS EXISTENTES EN PISO"],
+                        ["", "", "EQUIPOS INSTALADOS EN PISO (Racks, BBU, Tarjetas, Rectificadores, Modulos rectificadores, DCDU, Baterias)"],
+                        ["", "", "ESTATUS", "OPERADOR", "SERIAL", "TIPO DE ELEMENTO", "FABRICANTE", "MODELO", "DIMENSIONES RACKS (MTS)\n(Profundidad)", "DIMENSIONES RACKS (MTS)\n(Ancho)", "AREA M2"]
+                    ];
+                    if(formData.inventarioPiso.length === 0) wsPisoData.push(["", "", "Sin Datos"]);
+                    formData.inventarioPiso.forEach(r => {
+                        wsPisoData.push(["", "", r.estatus, r.operador, r.serial, r.tipo, r.fabricante, r.modelo, r.prof, r.ancho, r.area]);
+                    });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsPisoData), "INVENTARIO PISO");
 
-                    // 5. Tarjetas BBU
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.tarjetas), "TARJETAS BBU");
+                    // --- 5. HOJA: TARJETAS BBU ---
+                    let wsTarjetasData = [
+                        ["TARJETAS BBU / GABINETE"],
+                        ["TIPO", "MARCA", "MODELO", "SERIAL"]
+                    ];
+                    formData.tarjetas.forEach(t => {
+                        wsTarjetasData.push([t.tipo, t.marca, t.modelo, t.serial]);
+                    });
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsTarjetasData), "TARJETAS BBU");
 
-                    // 6. Energia
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.energia]), "INFO ENERGIA");
+                    // --- 6. HOJA: INFO ENERGIA ---
+                    let wsEnergiaData = [
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [],
+                        ["", "INFORMACION ENERGIA"], [],
+                        ["", "ENERGIA AC"], [],
+                        ["", "ELECTRIFICADORA", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "NIC o NRO CONTADOR", formData.energia.nic], [],
+                        ["", "NUMERO DE FASES", formData.energia.fases, "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "DIAMETRO DE CABLE(mm2)", formData.energia.diametroCable], [], [],
+                        ["", "TRANSFORMADOR", "", "", "", "", "", "", "", "", "", "", "TIPO", formData.energia.transformadorTipo, "", "", "", "CAPACIDAD (KW)", formData.energia.transformadorKw, "", "", "MARCA", formData.energia.transformadorMarca], [], [],
+                        ["", "CONTADOR", "", "", "", "", "", "", "", "", "", "", "TIPO DE BREAKER", formData.energia.contadorBreaker, "", "", "", "CAPACIDAD (A)", formData.energia.contadorA, "", "", "MARCA", formData.energia.contadorMarca], [], [],
+                        ["", "MOTOGENERADOR", "", "", "", "", "", "", "", "", "", "", "ESTADO", formData.energia.plantaEstado, "", "", "", "MODELO", formData.energia.plantaModelo, "", "", "MARCA", formData.energia.plantaMarca], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "SERIAL", formData.energia.plantaSerial, "", "", "", "CAPACIDAD (KW)", formData.energia.plantaKw, "", "", "PROPIETARIO", formData.energia.plantaPropietario], [], [], [],
+                        ["", "TOTALIZADOR TGD", "", "", "", "", "", "", "", "", "", "", "TIPO DE BREAKER", formData.energia.tgdBreaker, "", "", "", "CAPACIDAD (A)", formData.energia.tgdA, "", "", "MARCA", formData.energia.tgdMarca], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "CORRIENTE (A) L1.", formData.energia.l1A, "", "", "", "CORRIENTE (A) L2.", formData.energia.l2A, "", "", "CORRIENTE (A) L3.", formData.energia.l3A], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "VOLTAJE (V) L1-N.", formData.energia.l1nV, "", "", "", "VOLTAJE (V) L2-N.", formData.energia.l2nV, "", "", "VOLTAJE (V) L3-N.", formData.energia.l3nV], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "VOLTAJE (V) L1-L2.", formData.energia.l1l2V, "", "", "", "VOLTAJE (V) L1-L3.", formData.energia.l1l3V, "", "", "VOLTAJE (V) L2-L3.", formData.energia.l2l3V], [], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "CORRIENTE (A) TOTAL", formData.energia.corrienteTotal, "", "", "", "PDB o REGLETA DE BREAKERS", formData.energia.pdbRegleta]
+                    ];
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsEnergiaData), "INFO ENERGIA");
 
-                    // 7. Propuesta Instalacion
-                    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(formData.materiales), "PROPUESTA DE INSTALACION");
+                    // --- 7. HOJA: PROPUESTA DE INSTALACION ---
+                    let wsMatData = [
+                        ["", "FORMATO TSS - AREAS Y ENERGIA"], [], [], [], [], [], [], [],
+                        ["", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "FECHA DE TSS DD/MM/AA", formData.infoSitio.fecha, "", "", "", "", "ORDEN DE TRABAJO", formData.infoSitio.ordenTrabajo, "", "", "", "PROYECTO", formData.infoSitio.proyecto],
+                        [], [],
+                        ["", "MATERIALIZACIÓN"], [], [],
+                        ["", "MATERIAL", "CANTIDAD", "OBSERVACIONES"]
+                    ];
+                    formData.materiales.forEach(m => wsMatData.push(["", m.material, m.cantidad, m.observaciones]));
+                    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(wsMatData), "PROPUESTA DE INSTALACION");
 
+                    // Construye y guarda
                     XLSX.writeFile(wb, `TSS_${formData.infoSitio.codigoSitio || 'NUEVO'}.xlsx`);
                 } catch (error) {
-                    alert("Error al generar Excel.");
+                    alert("Error al generar Excel: " + error.message);
                 }
             };
 
@@ -445,10 +481,10 @@
                     <div className="card-section">
                         <h2 className="section-title">Detalles de Acceso</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div><label>Ubicación de Estación</label><input type="text" value={formData.infoSitio.ubicacionEstacion} onChange={(e) => handleChangeInfo('ubicacionEstacion', e.target.value)} /></div>
+                            <div><label>Ubicación de Estacion</label><input type="text" value={formData.infoSitio.ubicacionEstacion} onChange={(e) => handleChangeInfo('ubicacionEstacion', e.target.value)} /></div>
                             <div><label>Ubicación de Llaves</label><input type="text" value={formData.infoSitio.ubicacionLlaves} onChange={(e) => handleChangeInfo('ubicacionLlaves', e.target.value)} /></div>
                             <div><label>Tipo de Candado</label><input type="text" value={formData.infoSitio.tipoCandado} onChange={(e) => handleChangeInfo('tipoCandado', e.target.value)} /></div>
-                            <div className="col-span-1 md:col-span-3"><label>Contactos / Observación de Acceso</label><textarea rows="2" value={formData.infoSitio.observacionAcceso} onChange={(e) => handleChangeInfo('observacionAcceso', e.target.value)}></textarea></div>
+                            <div className="col-span-1 md:col-span-3"><label>Contactos u Observacion de Acceso</label><textarea rows="2" value={formData.infoSitio.observacionAcceso} onChange={(e) => handleChangeInfo('observacionAcceso', e.target.value)}></textarea></div>
                         </div>
                     </div>
                 </div>
@@ -711,7 +747,6 @@
                 </div>
             );
 
-            // ---- NUEVA PESTAÑA: MATERIALES (PROPUESTA INSTALACIÓN) ----
             const renderTabMateriales = () => {
                 const updateMaterial = (id, field, value) => {
                     setFormData(p => ({ ...p, materiales: p.materiales.map(m => m.id === id ? { ...m, [field]: value } : m) }));

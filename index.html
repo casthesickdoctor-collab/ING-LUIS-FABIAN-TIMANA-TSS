@@ -101,8 +101,41 @@
         function App() {
             const [activeTab, setActiveTab] = useState('info');
             const [formData, setFormData] = useState(initialData);
+            const [lastSaved, setLastSaved] = useState('');
+            const [isInitialLoad, setIsInitialLoad] = useState(true);
 
-            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
+            // ---- EFECTO: Cargar datos guardados al abrir la app ----
+            useEffect(() => {
+                const savedData = localStorage.getItem('tss_draft');
+                if (savedData) {
+                    try {
+                        setFormData(JSON.parse(savedData));
+                        setLastSaved('Borrador recuperado');
+                    } catch (e) {
+                        console.error("Error cargando borrador", e);
+                    }
+                }
+                setIsInitialLoad(false);
+                if (window.lucide) window.lucide.createIcons();
+            }, []);
+
+            // ---- EFECTO: Guardar datos automáticamente con cada cambio ----
+            useEffect(() => {
+                if (!isInitialLoad) {
+                    localStorage.setItem('tss_draft', JSON.stringify(formData));
+                    const time = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    setLastSaved(time);
+                }
+            }, [formData, isInitialLoad]);
+
+            const handleNewReport = () => {
+                if (confirm("¿Estás seguro de crear un NUEVO REPORTE? \nSe borrará la información actual de la pantalla para empezar de cero.")) {
+                    setFormData(initialData);
+                    localStorage.removeItem('tss_draft');
+                    setLastSaved('Reporte Nuevo');
+                    setActiveTab('info');
+                }
+            };
 
             const handleChangeInfo = (field, value) => {
                 setFormData(prev => ({ ...prev, infoSitio: { ...prev.infoSitio, [field]: value } }));
@@ -136,7 +169,7 @@
                     // 5. Energia
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([formData.energia]), "Energia");
 
-                    // 6. Fotos
+                    // 6. Fotos (Metadatos)
                     const fotosMetadata = formData.fotos.map(f => ({ Etiqueta: f.etiqueta, Archivo: f.name }));
                     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(fotosMetadata), "Registro Fotografico");
 
@@ -147,9 +180,9 @@
                 }
             };
 
-            // ---- COMPONENTES DE PESTAÑAS ----
+            // ---- FUNCIONES DE RENDERIZADO DE PESTAÑAS (CORRECCIÓN DE PÉRDIDA DE FOCO) ----
 
-            const TabInfoSitio = () => (
+            const renderTabInfoSitio = () => (
                 <div className="space-y-4">
                     <div className="card-section">
                         <h2 className="section-title">Información de Actividad</h2>
@@ -165,7 +198,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label>Nombre (Técnico / Ing)</label><input type="text" value={formData.infoSitio.tecnico} onChange={(e) => handleChangeInfo('tecnico', e.target.value)} /></div>
                             <div><label>Empresa</label><input type="text" value={formData.infoSitio.empresa} onChange={(e) => handleChangeInfo('empresa', e.target.value)} /></div>
-                            <div><label>Número de Contacto</label><input type="tel" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
+                            <div><label>Número de Contacto</label><input type="tel" inputMode="decimal" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
                         </div>
                     </div>
 
@@ -176,8 +209,8 @@
                             <div><label>Código Netco</label><input type="text" value={formData.infoSitio.codigoNetco} onChange={(e) => handleChangeInfo('codigoNetco', e.target.value)} /></div>
                             <div className="col-span-2"><label>Nombre del Sitio</label><input type="text" value={formData.infoSitio.nombreSitio} onChange={(e) => handleChangeInfo('nombreSitio', e.target.value)} /></div>
                             <div className="col-span-2"><label>Dirección</label><input type="text" value={formData.infoSitio.direccion} onChange={(e) => handleChangeInfo('direccion', e.target.value)} /></div>
-                            <div><label>Latitud</label><input type="number" step="any" value={formData.infoSitio.latitud} onChange={(e) => handleChangeInfo('latitud', e.target.value)} /></div>
-                            <div><label>Longitud</label><input type="number" step="any" value={formData.infoSitio.longitud} onChange={(e) => handleChangeInfo('longitud', e.target.value)} /></div>
+                            <div><label>Latitud</label><input type="number" inputMode="decimal" step="any" value={formData.infoSitio.latitud} onChange={(e) => handleChangeInfo('latitud', e.target.value)} /></div>
+                            <div><label>Longitud</label><input type="number" inputMode="decimal" step="any" value={formData.infoSitio.longitud} onChange={(e) => handleChangeInfo('longitud', e.target.value)} /></div>
                             <div><label>Departamento</label><input type="text" value={formData.infoSitio.departamento} onChange={(e) => handleChangeInfo('departamento', e.target.value)} /></div>
                             <div><label>Municipio</label><input type="text" value={formData.infoSitio.municipio} onChange={(e) => handleChangeInfo('municipio', e.target.value)} /></div>
                             <div><label>Torrero</label><input type="text" value={formData.infoSitio.torrero} onChange={(e) => handleChangeInfo('torrero', e.target.value)} /></div>
@@ -197,7 +230,7 @@
                 </div>
             );
 
-            const TabCondiciones = () => {
+            const renderTabCondiciones = () => {
                 const updateItem = (catIndex, itemIndex, field, value) => {
                     const newCond = [...formData.condiciones];
                     newCond[catIndex].items[itemIndex][field] = value;
@@ -238,8 +271,8 @@
                 );
             };
 
-            const TabInventarioTorre = () => {
-                const addRow = () => setFormData(p => ({ ...p, inventarioTorre: [...p.inventarioTorre, { id: Date.now(), estatus: 'OPERATIVO', arista: 'A', tipo: '', fabricante: '', modelo: '', azimuth: '', altura: '', diametroMW: '', alto: '', ancho: '', prof: '', peso: '' }] }));
+            const renderTabInventarioTorre = () => {
+                const addRow = () => setFormData(p => ({ ...p, inventarioTorre: [...p.inventarioTorre, { id: Date.now(), estatus: 'OPERATIVO', arista: 'A', tipo: '', fabricante: '', modelo: '', serial: '', azimuth: '', altura: '', diametroMW: '', alto: '', ancho: '', prof: '', peso: '' }] }));
                 const updateRow = (id, field, value) => setFormData(p => ({ ...p, inventarioTorre: p.inventarioTorre.map(r => r.id === id ? { ...r, [field]: value } : r) }));
                 const deleteRow = (id) => setFormData(p => ({ ...p, inventarioTorre: p.inventarioTorre.filter(r => r.id !== id) }));
 
@@ -257,14 +290,14 @@
                                 <thead className="bg-gray-100 uppercase text-xs">
                                     <tr>
                                         <th className="p-2">Estatus</th><th className="p-2">Arista</th><th className="p-2">Tipo Elemento</th>
-                                        <th className="p-2">Fabricante</th><th className="p-2">Modelo</th><th className="p-2 w-16">Azimuth</th>
+                                        <th className="p-2">Fabricante</th><th className="p-2">Modelo</th><th className="p-2">Serial</th><th className="p-2 w-16">Azimuth</th>
                                         <th className="p-2 w-16">Alt (m)</th><th className="p-2 w-16">Diam MW</th>
                                         <th className="p-2 w-16">Alto(m)</th><th className="p-2 w-16">Ancho(m)</th>
                                         <th className="p-2 w-16">Prof(m)</th><th className="p-2 w-16">Peso</th><th className="p-2">Act</th>
                                         </tr>
                                 </thead>
                                 <tbody>
-                                    {formData.inventarioTorre.length === 0 ? <tr><td colSpan="13" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
+                                    {formData.inventarioTorre.length === 0 ? <tr><td colSpan="14" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
                                     {formData.inventarioTorre.map((row) => (
                                         <tr key={row.id} className="border-b hover:bg-gray-50">
                                             <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs"><option>OPERATIVO</option><option>APAGADO</option></select></td>
@@ -272,13 +305,14 @@
                                             <td className="p-1"><input type="text" placeholder="RF/MW/RRU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" placeholder="MW" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs bg-yellow-50" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="text" value={row.serial} onChange={e => updateRow(row.id, 'serial', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" placeholder="MW" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs bg-yellow-50" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
                                         </tr>
                                     ))}
@@ -289,14 +323,13 @@
                 );
             };
 
-            const TabInventarioPiso = () => {
+            const renderTabInventarioPiso = () => {
                 const addRow = () => setFormData(p => ({ ...p, inventarioPiso: [...p.inventarioPiso, { id: Date.now(), estatus: 'OPERATIVO', operador: 'UNIRED', serial: '', tipo: '', fabricante: '', modelo: '', prof: '', ancho: '', area: '' }] }));
                 const updateRow = (id, field, value) => {
                     setFormData(p => ({
                         ...p, inventarioPiso: p.inventarioPiso.map(r => {
                             if (r.id === id) {
                                 const newRow = { ...r, [field]: value };
-                                // Autocalcular Area si se cambian ancho o prof
                                 if (field === 'ancho' || field === 'prof') {
                                     const a = parseFloat(field === 'ancho' ? value : newRow.ancho) || 0;
                                     const pr = parseFloat(field === 'prof' ? value : newRow.prof) || 0;
@@ -336,8 +369,8 @@
                                             <td className="p-1"><input type="text" placeholder="RACK / BBU" value={row.tipo} onChange={e => updateRow(row.id, 'tipo', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
-                                            <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs" /></td>
+                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs" /></td>
                                             <td className="p-1"><input type="text" readOnly value={row.area} className="mt-0 text-xs bg-gray-100 font-bold" /></td>
                                             <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-2 py-1">X</button></td>
                                         </tr>
@@ -349,7 +382,7 @@
                 );
             };
 
-            const TabEnergia = () => (
+            const renderTabEnergia = () => (
                 <div className="space-y-4">
                     <div className="card-section">
                         <h2 className="section-title">Energía AC</h2>
@@ -365,7 +398,7 @@
                         <h2 className="section-title">Transformador</h2>
                         <div className="grid grid-cols-3 gap-3">
                             <div><label>Tipo</label><input type="text" placeholder="Ej: Trifásico" value={formData.energia.transformadorTipo} onChange={(e) => handleChangeEnergia('transformadorTipo', e.target.value)} /></div>
-                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.transformadorKw} onChange={(e) => handleChangeEnergia('transformadorKw', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.transformadorKw} onChange={(e) => handleChangeEnergia('transformadorKw', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.transformadorMarca} onChange={(e) => handleChangeEnergia('transformadorMarca', e.target.value)} /></div>
                         </div>
                     </div>
@@ -374,7 +407,7 @@
                         <h2 className="section-title">Contador</h2>
                         <div className="grid grid-cols-3 gap-3">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.contadorBreaker} onChange={(e) => handleChangeEnergia('contadorBreaker', e.target.value)} /></div>
-                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.contadorMarca} onChange={(e) => handleChangeEnergia('contadorMarca', e.target.value)} /></div>
                         </div>
                     </div>
@@ -386,7 +419,7 @@
                             <div><label>Modelo</label><input type="text" value={formData.energia.plantaModelo} onChange={(e) => handleChangeEnergia('plantaModelo', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.plantaMarca} onChange={(e) => handleChangeEnergia('plantaMarca', e.target.value)} /></div>
                             <div><label>Serial</label><input type="text" value={formData.energia.plantaSerial} onChange={(e) => handleChangeEnergia('plantaSerial', e.target.value)} /></div>
-                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
                             <div><label>Propietario</label><input type="text" value={formData.energia.plantaPropietario} onChange={(e) => handleChangeEnergia('plantaPropietario', e.target.value)} /></div>
                         </div>
                     </div>
@@ -395,28 +428,28 @@
                         <h2 className="section-title text-green-700">Totalizador TGD y Mediciones</h2>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4 pb-4 border-b">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.tgdBreaker} onChange={(e) => handleChangeEnergia('tgdBreaker', e.target.value)} /></div>
-                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.tgdMarca} onChange={(e) => handleChangeEnergia('tgdMarca', e.target.value)} /></div>
                         </div>
                         
                         <div className="grid grid-cols-3 gap-2 text-center">
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
                             
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L1-N</label><input type="number" step="any" value={formData.energia.l1nV} onChange={(e) => handleChangeEnergia('l1nV', e.target.value)} /></div>
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L2-N</label><input type="number" step="any" value={formData.energia.l2nV} onChange={(e) => handleChangeEnergia('l2nV', e.target.value)} /></div>
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L3-N</label><input type="number" step="any" value={formData.energia.l3nV} onChange={(e) => handleChangeEnergia('l3nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L1-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1nV} onChange={(e) => handleChangeEnergia('l1nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L2-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2nV} onChange={(e) => handleChangeEnergia('l2nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L3-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l3nV} onChange={(e) => handleChangeEnergia('l3nV', e.target.value)} /></div>
                             
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L2</label><input type="number" step="any" value={formData.energia.l1l2V} onChange={(e) => handleChangeEnergia('l1l2V', e.target.value)} /></div>
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L3</label><input type="number" step="any" value={formData.energia.l1l3V} onChange={(e) => handleChangeEnergia('l1l3V', e.target.value)} /></div>
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L2-L3</label><input type="number" step="any" value={formData.energia.l2l3V} onChange={(e) => handleChangeEnergia('l2l3V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L2</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1l2V} onChange={(e) => handleChangeEnergia('l1l2V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1l3V} onChange={(e) => handleChangeEnergia('l1l3V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L2-L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2l3V} onChange={(e) => handleChangeEnergia('l2l3V', e.target.value)} /></div>
                         </div>
                     </div>
                 </div>
             );
 
-            const TabFotografias = () => {
+            const renderTabFotografias = () => {
                 const handlePhotoUpload = (e) => {
                     const files = Array.from(e.target.files);
                     const newPhotos = files.map(file => ({ id: Date.now() + Math.random(), name: file.name, url: URL.createObjectURL(file), file: file, etiqueta: 'Panorámica de Sitio' }));
@@ -461,13 +494,13 @@
 
             const renderTab = () => {
                 switch(activeTab) {
-                    case 'info': return <TabInfoSitio />;
-                    case 'condiciones': return <TabCondiciones />;
-                    case 'torre': return <TabInventarioTorre />;
-                    case 'piso': return <TabInventarioPiso />;
-                    case 'energia': return <TabEnergia />;
-                    case 'fotos': return <TabFotografias />;
-                    default: return <TabInfoSitio />;
+                    case 'info': return renderTabInfoSitio();
+                    case 'condiciones': return renderTabCondiciones();
+                    case 'torre': return renderTabInventarioTorre();
+                    case 'piso': return renderTabInventarioPiso();
+                    case 'energia': return renderTabEnergia();
+                    case 'fotos': return renderTabFotografias();
+                    default: return renderTabInfoSitio();
                 }
             };
 
@@ -482,14 +515,22 @@
                     <header className="bg-blue-800 text-white p-3 shadow-md flex justify-between items-center sticky top-0 z-50">
                         <div>
                             <h1 className="font-bold leading-tight">TSS Digital V2.1</h1>
-                            <p className="text-xs text-blue-200">{formData.infoSitio.codigoSitio || 'Nuevo Sitio'}</p>
+                            <div className="flex items-center gap-1 text-xs text-blue-200">
+                                <span>{formData.infoSitio.codigoSitio || 'Nuevo Sitio'}</span>
+                                {lastSaved && <span className="ml-2 px-1.5 py-0.5 bg-blue-700 rounded shadow-inner">Guardado: {lastSaved}</span>}
+                            </div>
                         </div>
-                        <button onClick={exportToExcel} className="bg-green-500 px-3 py-1.5 rounded font-bold text-sm shadow flex items-center gap-1 hover:bg-green-600 transition-colors">
-                            <i data-lucide="file-spreadsheet" className="w-4 h-4"></i> <span className="hidden sm:inline">Exportar a Excel</span>
-                        </button>
+                        <div className="flex gap-2">
+                            <button onClick={handleNewReport} className="bg-red-500 px-3 py-1.5 rounded font-bold text-sm shadow flex items-center gap-1 hover:bg-red-600 transition-colors">
+                                <i data-lucide="file-plus" className="w-4 h-4"></i> <span className="hidden sm:inline">Nuevo</span>
+                            </button>
+                            <button onClick={exportToExcel} className="bg-green-500 px-3 py-1.5 rounded font-bold text-sm shadow flex items-center gap-1 hover:bg-green-600 transition-colors">
+                                <i data-lucide="file-spreadsheet" className="w-4 h-4"></i> <span className="hidden sm:inline">Exportar</span>
+                            </button>
+                        </div>
                     </header>
 
-                    <nav className="bg-white shadow mb-4 px-2 overflow-x-auto no-scrollbar flex border-b whitespace-nowrap sticky top-[52px] z-40">
+                    <nav className="bg-white shadow mb-4 px-2 overflow-x-auto no-scrollbar flex border-b whitespace-nowrap sticky top-[60px] z-40">
                         {navItems.map(tab => (
                             <button key={tab.id} onClick={() => setActiveTab(tab.id)} 
                                 className={`px-4 py-3 text-sm transition-colors ${activeTab === tab.id ? 'tab-active' : 'tab-inactive hover:bg-gray-50'}`}>

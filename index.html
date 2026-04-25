@@ -177,16 +177,17 @@
             );
         };
 
-        // ---- MODAL SITIOS GUARDADOS ----
-        const SavedSitesModal = ({ sites, onLoadSite, onDeleteSite, onClose }) => {
+        // ---- MODAL SITIOS GUARDADOS (CON IMPORTAR/EXPORTAR) ----
+        const SavedSitesModal = ({ sites, onLoadSite, onDeleteSite, onClose, onExportDB, onImportDB }) => {
             return (
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-70 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative max-h-[80vh] flex flex-col">
+                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative max-h-[90vh] flex flex-col">
                         <div className="flex justify-between items-center mb-4 border-b pb-2">
-                            <h3 className="font-bold text-lg text-blue-800">Sitios Guardados</h3>
+                            <h3 className="font-bold text-lg text-blue-800">Mis Reportes Guardados</h3>
                             <button onClick={onClose} className="text-gray-500 hover:text-gray-800 font-bold text-2xl">&times;</button>
                         </div>
-                        <div className="flex-1 overflow-y-auto pr-2">
+                        
+                        <div className="flex-1 overflow-y-auto pr-2 min-h-[200px]">
                             {sites.length === 0 ? (
                                 <p className="text-center text-gray-500 py-4">No hay sitios guardados aún.</p>
                             ) : (
@@ -203,6 +204,23 @@
                                     </div>
                                 ))
                             )}
+                        </div>
+
+                        {/* ZONA DE SINCRONIZACIÓN CRUZADA */}
+                        <div className="mt-4 border-t pt-4 bg-blue-50 p-3 rounded-lg flex flex-col gap-2">
+                            <p className="text-xs text-center text-blue-900 font-bold uppercase">Sincronizar entre Celular y PC</p>
+                            <p className="text-[10px] text-gray-600 text-center leading-tight mb-2">
+                                ¿Quieres ver estos sitios en tu PC? Descarga el Backup desde tu celular, pásalo a tu PC, y cárgalo allí.
+                            </p>
+                            <div className="flex gap-2">
+                                <button onClick={onExportDB} className="flex-1 bg-white text-blue-700 py-2 rounded text-xs font-bold border border-blue-300 hover:bg-blue-100 shadow-sm flex justify-center items-center gap-1">
+                                    <i data-lucide="download-cloud" className="w-4 h-4"></i> Descargar
+                                </button>
+                                <label className="flex-1 bg-blue-600 text-white py-2 rounded text-xs font-bold hover:bg-blue-700 shadow-sm cursor-pointer flex justify-center items-center gap-1 text-center">
+                                    <i data-lucide="upload-cloud" className="w-4 h-4"></i> Cargar Backup
+                                    <input type="file" accept=".json" className="hidden" onChange={onImportDB} />
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -233,9 +251,9 @@
                 }
                 setIsInitialLoad(false);
                 if (window.lucide) window.lucide.createIcons();
-            }, []);
+            }, [showSavedModal]); // Re-renderizar iconos si el modal se abre/cierra
 
-            // Autoguardado
+            // Autoguardado Temporal
             useEffect(() => {
                 if (!isInitialLoad) {
                     localStorage.setItem('tss_draft_v21', JSON.stringify(formData));
@@ -244,7 +262,7 @@
                 }
             }, [formData, isInitialLoad]);
 
-            // Base de Datos
+            // ---- GESTIÓN DE SITIOS (BASE DE DATOS LOCAL) ----
             const handleSaveCurrentSite = () => {
                 const codigo = formData.infoSitio.codigoSitio.trim();
                 if (!codigo) { alert("Por favor ingresa un 'Código de Sitio' en la pestaña 1 para guardar."); return; }
@@ -287,6 +305,42 @@
                     setLastSaved('Reporte Nuevo');
                     setActiveTab('info');
                 }
+            };
+
+            // ---- GESTIÓN DE BACKUP (IMPORTAR / EXPORTAR BD ENTERA) ----
+            const handleExportDB = () => {
+                if(savedSitesList.length === 0) { alert("No tienes sitios guardados para exportar."); return; }
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(savedSitesList));
+                const dlAnchorElem = document.createElement('a');
+                dlAnchorElem.setAttribute("href", dataStr);
+                dlAnchorElem.setAttribute("download", `TSS_Backup_Sitios_${new Date().toISOString().slice(0,10)}.json`);
+                dlAnchorElem.click();
+            };
+
+            const handleImportDB = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const importedSites = JSON.parse(event.target.result);
+                        if (Array.isArray(importedSites)) {
+                            // Evitar duplicados por ID
+                            const currentIds = savedSitesList.map(s => s.id);
+                            const newSites = importedSites.filter(s => !currentIds.includes(s.id));
+                            const updatedList = [...newSites, ...savedSitesList];
+                            setSavedSitesList(updatedList);
+                            localStorage.setItem('tss_saved_sites_list', JSON.stringify(updatedList));
+                            alert(`¡Éxito! Se importaron ${newSites.length} sitios nuevos a tu base de datos.`);
+                        } else {
+                            alert("El archivo seleccionado no tiene el formato de backup correcto.");
+                        }
+                    } catch(err) {
+                        alert("Error leyendo el archivo de respaldo.");
+                    }
+                    e.target.value = null; // Reset input
+                };
+                reader.readAsText(file);
             };
 
             // Manejadores
@@ -553,6 +607,7 @@
                                     </tr>
                                 </thead>
                                 <tbody>
+                                    {formData.inventarioTorre.length === 0 ? <tr><td colSpan="14" className="p-4 text-center text-gray-500">No hay equipos registrados</td></tr> : null}
                                     {formData.inventarioTorre.map((row) => (
                                         <tr key={row.id} className="border-b hover:bg-gray-50">
                                             <td className="p-1"><select value={row.estatus} onChange={e => updateRow(row.id, 'estatus', e.target.value)} className="mt-0 text-xs py-1"><option>OPERATIVO</option><option>APAGADO</option></select></td>
@@ -882,7 +937,7 @@
                     </main>
 
                     {scannerConfig && <BarcodeScannerModal onScan={handleScanResult} onClose={() => setScannerConfig(null)} />}
-                    {showSavedModal && <SavedSitesModal sites={savedSitesList} onLoadSite={handleLoadSite} onDeleteSite={handleDeleteSite} onClose={() => setShowSavedModal(false)} />}
+                    {showSavedModal && <SavedSitesModal sites={savedSitesList} onLoadSite={handleLoadSite} onDeleteSite={handleDeleteSite} onClose={() => setShowSavedModal(false)} onExportDB={handleExportDB} onImportDB={handleImportDB} />}
                 </div>
             );
         }

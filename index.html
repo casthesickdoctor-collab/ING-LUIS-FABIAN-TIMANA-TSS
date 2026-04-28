@@ -32,16 +32,6 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .input-group { display: flex; gap: 0.25rem; align-items: stretch; }
-        
-        /* Estilos Lector Pantalla Completa */
-        #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; position: relative; }
-        #reader video { object-fit: cover; }
-        .scan-line {
-            position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #2563eb;
-            box-shadow: 0 0 10px #2563eb, 0 0 20px #2563eb;
-            animation: scan 2s infinite linear; z-index: 10;
-        }
-        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
     </style>
 </head>
 <body>
@@ -79,36 +69,26 @@
             fotos: []
         };
 
-        // ---- MOTOR DE ESCÁNER FULL HD (Optimizado Huawei/ZTE CODE 128) ----
+        // ---- MOTOR DE ESCÁNER ESTÁNDAR Y SEGURO ----
         const BarcodeScannerModal = ({ onScan, onClose }) => {
             const [errorMsg, setErrorMsg] = useState("");
-            const html5QrCodeRef = useRef(null);
 
             useEffect(() => {
-                // Instanciamos el lector directamente (Sin la UI genérica)
-                html5QrCodeRef.current = new Html5Qrcode("reader");
-                
-                const config = { 
-                    fps: 15,
-                    // Limitamos para no perder CPU buscando formatos inútiles
-                    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE ],
-                    experimentalFeatures: { useBarCodeDetectorIfSupported: true } // Usa Google Lens si el cel lo soporta
-                };
+                let html5QrCode;
+                try {
+                    html5QrCode = new Html5Qrcode("reader");
+                    
+                    // Configuración segura sin atributos experimentales
+                    const config = { 
+                        fps: 10,
+                        qrbox: { width: 280, height: 100 } // Rectángulo amplio para seriales largos
+                    };
 
-                // Pedimos cámara trasera en ALTA DEFINICIÓN y Autoenfoque
-                const cameraConfig = { 
-                    facingMode: "environment",
-                    width: { ideal: 1920 },
-                    height: { ideal: 1080 },
-                    advanced: [{ focusMode: "continuous" }]
-                };
-
-                html5QrCodeRef.current.start(
-                    cameraConfig, 
-                    config,
-                    (decodedText) => {
-                        // Filtro de seguridad
-                        if(decodedText && decodedText.trim().length > 3) {
+                    html5QrCode.start(
+                        { facingMode: "environment" }, 
+                        config,
+                        (decodedText) => {
+                            // Si lee exitosamente
                             if (navigator.vibrate) navigator.vibrate(200); // Vibración 
                             try {
                                 const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -117,41 +97,44 @@
                                 osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1);
                             } catch(e) {}
                             
-                            onScan(decodedText.trim());
+                            // Parar cámara y enviar dato
+                            html5QrCode.stop().then(() => {
+                                onScan(decodedText.trim());
+                            }).catch(err => console.log(err));
+                        },
+                        (errorMessage) => { 
+                            // Silenciamos los errores de enfoque continuo
                         }
-                    },
-                    (errorMessage) => { /* Silenciar advertencias de búsqueda */ }
-                ).catch((err) => {
-                    setErrorMsg("Permite el acceso a la cámara. Si falla, tu navegador puede estar bloqueando el video.");
-                });
+                    ).catch((err) => {
+                        setErrorMsg("Error: Asegúrate de dar permisos a la cámara y usar HTTPS.");
+                    });
+                } catch (e) {
+                    setErrorMsg("Tu navegador no soporta el escáner de códigos.");
+                }
 
+                // Limpieza al desmontar para evitar congelamientos
                 return () => {
-                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
-                        html5QrCodeRef.current.stop().catch(e => console.error(e));
+                    if (html5QrCode && html5QrCode.isScanning) {
+                        html5QrCode.stop().catch(e => console.log(e));
                     }
                 };
             }, []);
 
             return (
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-95 flex flex-col items-center justify-center p-4">
-                    <div className="w-full max-w-md relative flex flex-col">
-                        <div className="bg-white p-3 rounded-t-lg">
-                            <h3 className="font-bold text-lg text-blue-800 text-center">Escáner de Seriales</h3>
-                            <p className="text-xs text-gray-700 text-center font-bold">
-                                📸 ALÉJATE 25cm DEL CÓDIGO PARA QUE ENFOQUE LA CÁMARA
-                            </p>
+                    <div className="w-full max-w-md bg-white rounded-lg overflow-hidden flex flex-col shadow-2xl relative">
+                        <div className="p-3 bg-blue-800 text-white text-center">
+                            <h3 className="font-bold text-lg">Escáner de Seriales</h3>
+                            <p className="text-xs">Ubica el código dentro del recuadro.</p>
                         </div>
                         
                         {errorMsg ? (
                             <div className="bg-red-100 text-red-700 p-4 text-sm text-center">{errorMsg}</div>
                         ) : (
-                            <div id="reader" className="w-full min-h-[300px] border-4 border-blue-500 relative">
-                                {/* Línea láser animada */}
-                                <div className="scan-line"></div>
-                            </div>
+                            <div id="reader" className="w-full bg-black min-h-[250px]"></div>
                         )}
                         
-                        <div className="bg-white p-3 rounded-b-lg">
+                        <div className="p-3 bg-white">
                             <button onClick={onClose} className="bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar</button>
                         </div>
                     </div>
@@ -208,7 +191,7 @@
             );
         };
 
-        // ---- MODAL EXPORTAR (LOCAL VS VPS) ----
+        // ---- MODAL EXPORTAR ----
         const ExportModal = ({ onClose, onExportLocal, onExportVPS, isGenerating }) => {
             return (
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-70 flex flex-col items-center justify-center p-4">
@@ -284,7 +267,6 @@
                 }
             }, [formData, isInitialLoad]);
 
-            // ---- GESTIÓN DE SITIOS BD LOCAL ----
             const handleSaveCurrentSite = () => {
                 const codigo = formData.infoSitio.codigoSitio.trim();
                 if (!codigo) { alert("Por favor ingresa un 'Código de Sitio' en la pestaña 1 para guardar."); return; }
@@ -354,7 +336,6 @@
                 reader.readAsText(file);
             };
 
-            // Manejadores Formularios
             const handleChangeInfo = (field, value) => setFormData(p => ({ ...p, infoSitio: { ...p.infoSitio, [field]: value } }));
             const handleChangeEnergia = (field, value) => setFormData(p => ({ ...p, energia: { ...p.energia, [field]: value } }));
 
@@ -362,7 +343,6 @@
                 if (!scannerConfig) return;
                 const { section, rowId, field } = scannerConfig;
                 
-                // Limpiar posibles prefijos de Huawei
                 let cleanText = decodedText;
                 if(cleanText.startsWith("(S)")) cleanText = cleanText.substring(3).trim();
                 else if (cleanText.startsWith("1P")) cleanText = cleanText.substring(2).trim();
@@ -377,13 +357,9 @@
                     return newData;
                 });
                 
-                // Cerrar escáner
                 setScannerConfig(null); 
             };
 
-            // =========================================================================
-            // EXPORTACIONES LOCAL (PLANO SIN LOGOS PERO CON ESTRUCTURA EXACTA)
-            // =========================================================================
             const handleExportLocal = () => {
                 try {
                     const wb = XLSX.utils.book_new();
@@ -461,7 +437,6 @@
                 }
             };
 
-            // ---- RENDERIZADO DE PESTAÑAS (Mismos componentes) ----
             const renderTabInfoSitio = () => (
                 <div className="space-y-4">
                     <div className="card-section">
@@ -485,7 +460,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label>Nombre (Técnico / Ing)</label><input type="text" value={formData.infoSitio.tecnico} onChange={(e) => handleChangeInfo('tecnico', e.target.value)} /></div>
                             <div><label>Empresa</label><input type="text" value={formData.infoSitio.empresa} onChange={(e) => handleChangeInfo('empresa', e.target.value)} /></div>
-                            <div><label>Número de Contacto</label><input type="tel" inputMode="decimal" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
+                            <div><label>Número de Contacto</label><input type="tel" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
                         </div>
                     </div>
 

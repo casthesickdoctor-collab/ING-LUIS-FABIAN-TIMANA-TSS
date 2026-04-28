@@ -31,13 +31,17 @@
         .section-title { font-size: 1.125rem; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Contenedor especial para input + boton escaner */
         .input-group { display: flex; gap: 0.25rem; align-items: stretch; }
         
-        /* Estilos para el scanner nativo */
-        #reader button { background: #2563eb; color: white; padding: 5px 10px; border-radius: 5px; margin: 5px; font-weight: bold; border:none; }
-        #reader select { padding: 5px; border-radius: 5px; margin-bottom: 10px; max-width: 100%; border: 1px solid #ccc; }
+        /* Estilos Lector Pantalla Completa */
+        #reader { width: 100%; border-radius: 8px; overflow: hidden; background: #000; position: relative; }
+        #reader video { object-fit: cover; }
+        .scan-line {
+            position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: #2563eb;
+            box-shadow: 0 0 10px #2563eb, 0 0 20px #2563eb;
+            animation: scan 2s infinite linear; z-index: 10;
+        }
+        @keyframes scan { 0% { top: 0; } 50% { top: 100%; } 100% { top: 0; } }
     </style>
 </head>
 <body>
@@ -46,139 +50,110 @@
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
 
-        // Estructura de datos MILIMÉTRICA basada en V.2.1 PROVEEDOR
         const initialData = {
             infoSitio: {
-                ordenTrabajo: '', fecha: '', proyecto: '',
-                sector1: '', sector2: '', sector3: '', sector4: '',
-                tecnico: '', empresa: '', telefono: '',
-                codigoSitio: '', codigoNetco: '', nombreSitio: '', direccion: '',
+                ordenTrabajo: '', fecha: '', proyecto: '', sector1: '', sector2: '', sector3: '', sector4: '',
+                tecnico: '', empresa: '', telefono: '', codigoSitio: '', codigoNetco: '', nombreSitio: '', direccion: '',
                 latitud: '', longitud: '', departamento: '', municipio: '', torrero: '', idTorrero: '',
                 ubicacionEstacion: '', ubicacionLlaves: '', tipoCandado: '', observacionAcceso: ''
             },
             condiciones: [
-                { categoria: '1. ACCESOS', items: [
-                    { id: '1.1', desc: 'PUERTAS Y PORTONES', estado: 'N/A', obs: '' },
-                    { id: '1.2', desc: 'CHAPAS O CANDADOS', estado: 'N/A', obs: '' },
-                    { id: '1.3', desc: 'ALARMAS', estado: 'N/A', obs: '' }
-                ]},
-                { categoria: '2. AREAS INTERIORES Y EXTERIORES', items: [
-                    { id: '2.1', desc: 'CAMINO DE ACCESO', estado: 'N/A', obs: '' },
-                    { id: '2.2', desc: 'REALIZAR LIMPIEZA EXTERIOR', estado: 'N/A', obs: '' },
-                    { id: '2.3', desc: 'REALIZAR LIMPIEZA INTERIOR', estado: 'N/A', obs: '' },
-                    { id: '2.4', desc: 'DESHIERBAR', estado: 'N/A', obs: '' },
-                    { id: '2.5', desc: 'RETIRO DE BASURA', estado: 'N/A', obs: '' },
-                    { id: '2.6', desc: 'ALAMBRE DE PUA O CONCERTINA', estado: 'N/A', obs: '' },
-                    { id: '2.7', desc: 'CONDICION Y NIVEL DE GRAVA', estado: 'N/A', obs: '' },
-                    { id: '2.8', desc: 'MUROS (INMUEBLE)', estado: 'N/A', obs: '' },
-                    { id: '2.9', desc: 'COLUMNA (INMUEBLE)', estado: 'N/A', obs: '' },
-                    { id: '2.10', desc: 'ESTRUCTURA METALICA Y VIGAS', estado: 'N/A', obs: '' },
-                    { id: '2.11', desc: 'SISTEMA GENERAL DE DRENAJE', estado: 'N/A', obs: '' },
-                    { id: '2.12', desc: 'IMPERMEABILIZACIÓN GENERAL (TERRAZA)', estado: 'N/A', obs: '' }
-                ]},
-                { categoria: '3. SISTEMA DE ILUMINACIÓN Y ELÉCTRICO GENERAL', items: [
-                    { id: '3.1', desc: 'FUNCIONAMIENTO DE LA LUZ DE OBSTRUCCIÓN', estado: 'N/A', obs: '' },
-                    { id: '3.2', desc: 'ESTADO DEL NICHO DE ACOMETIDA ELÉCTRICA', estado: 'N/A', obs: '' },
-                    { id: '3.3', desc: 'ESTADO DE ACOMETIDA HASTA EL TRANSFORMADOR', estado: 'N/A', obs: '' },
-                    { id: '3.4', desc: 'POSTE DE TRANSFORMADOR', estado: 'N/A', obs: '' },
-                    { id: '3.5', desc: 'ESTADO DEL CONTADOR', estado: 'N/A', obs: '' },
-                    { id: '3.6', desc: 'SISTEMA ELÉCTRICO Y CONEXIONES', estado: 'N/A', obs: '' },
-                    { id: '3.7', desc: 'ESTADO DEL TABLERO ELECTRICO', estado: 'N/A', obs: '' },
-                    { id: '3.8', desc: 'PROTECTORES DE SOBRETENSION', estado: 'N/A', obs: '' },
-                    { id: '3.9', desc: 'CONDICION CABLES Y TUBERIAS', estado: 'N/A', obs: '' },
-                    { id: '3.10', desc: 'SISTEMA DE ILUMINACION INTERIOR Y EXTERIOR', estado: 'N/A', obs: '' },
-                    { id: '3.11', desc: 'TOMAS CORRIENTE Y ENCHUFES', estado: 'N/A', obs: '' },
-                    { id: '3.12', desc: 'VENTILACION / AIRE ACONDICIONADO', estado: 'N/A', obs: '' }
-                ]}
+                { categoria: '1. ACCESOS', items: [{ id: '1.1', desc: 'PUERTAS Y PORTONES', estado: 'N/A', obs: '' }, { id: '1.2', desc: 'CHAPAS O CANDADOS', estado: 'N/A', obs: '' }, { id: '1.3', desc: 'ALARMAS', estado: 'N/A', obs: '' }]},
+                { categoria: '2. AREAS INTERIORES Y EXTERIORES', items: [{ id: '2.1', desc: 'CAMINO DE ACCESO', estado: 'N/A', obs: '' }, { id: '2.2', desc: 'REALIZAR LIMPIEZA EXTERIOR', estado: 'N/A', obs: '' }, { id: '2.3', desc: 'REALIZAR LIMPIEZA INTERIOR', estado: 'N/A', obs: '' }, { id: '2.4', desc: 'DESHIERBAR', estado: 'N/A', obs: '' }, { id: '2.5', desc: 'RETIRO DE BASURA', estado: 'N/A', obs: '' }, { id: '2.6', desc: 'ALAMBRE DE PUA O CONCERTINA', estado: 'N/A', obs: '' }, { id: '2.7', desc: 'CONDICION Y NIVEL DE GRAVA', estado: 'N/A', obs: '' }, { id: '2.8', desc: 'MUROS (INMUEBLE)', estado: 'N/A', obs: '' }, { id: '2.9', desc: 'COLUMNA (INMUEBLE)', estado: 'N/A', obs: '' }, { id: '2.10', desc: 'ESTRUCTURA METALICA Y VIGAS', estado: 'N/A', obs: '' }, { id: '2.11', desc: 'SISTEMA GENERAL DE DRENAJE', estado: 'N/A', obs: '' }, { id: '2.12', desc: 'IMPERMEABILIZACIÓN GENERAL (TERRAZA)', estado: 'N/A', obs: '' }]},
+                { categoria: '3. SISTEMA DE ILUMINACIÓN Y ELÉCTRICO GENERAL', items: [{ id: '3.1', desc: 'FUNCIONAMIENTO DE LA LUZ DE OBSTRUCCIÓN', estado: 'N/A', obs: '' }, { id: '3.2', desc: 'ESTADO DEL NICHO DE ACOMETIDA ELÉCTRICA', estado: 'N/A', obs: '' }, { id: '3.3', desc: 'ESTADO DE ACOMETIDA HASTA EL TRANSFORMADOR', estado: 'N/A', obs: '' }, { id: '3.4', desc: 'POSTE DE TRANSFORMADOR', estado: 'N/A', obs: '' }, { id: '3.5', desc: 'ESTADO DEL CONTADOR', estado: 'N/A', obs: '' }, { id: '3.6', desc: 'SISTEMA ELÉCTRICO Y CONEXIONES', estado: 'N/A', obs: '' }, { id: '3.7', desc: 'ESTADO DEL TABLERO ELECTRICO', estado: 'N/A', obs: '' }, { id: '3.8', desc: 'PROTECTORES DE SOBRETENSION', estado: 'N/A', obs: '' }, { id: '3.9', desc: 'CONDICION CABLES Y TUBERIAS', estado: 'N/A', obs: '' }, { id: '3.10', desc: 'SISTEMA DE ILUMINACION INTERIOR Y EXTERIOR', estado: 'N/A', obs: '' }, { id: '3.11', desc: 'TOMAS CORRIENTE Y ENCHUFES', estado: 'N/A', obs: '' }, { id: '3.12', desc: 'VENTILACION / AIRE ACONDICIONADO', estado: 'N/A', obs: '' }]}
             ],
-            inventarioTorre: [],
-            inventarioPiso: [],
+            inventarioTorre: [], inventarioPiso: [],
             tarjetas: [
-                { id: 'bbp1', tipo: 'BBP #1', marca: '', modelo: '', serial: '' },
-                { id: 'bbp2', tipo: 'BBP #2', marca: '', modelo: '', serial: '' },
-                { id: 'bbp3', tipo: 'BBP #3', marca: '', modelo: '', serial: '' },
-                { id: 'bbp4', tipo: 'BBP #4', marca: '', modelo: '', serial: '' },
-                { id: 'bbp5', tipo: 'BBP #5', marca: '', modelo: '', serial: '' },
-                { id: 'bbp6', tipo: 'BBP #6', marca: '', modelo: '', serial: '' },
-                { id: 'mpt1', tipo: 'MPT #1', marca: '', modelo: '', serial: '' },
-                { id: 'mpt2', tipo: 'MPT #2', marca: '', modelo: '', serial: '' },
-                { id: 'fan',  tipo: 'FAN', marca: '', modelo: '', serial: '' },
-                { id: 'upeu1', tipo: 'UPEU #1', marca: '', modelo: '', serial: '' },
-                { id: 'upeu2', tipo: 'UPEU #2', marca: '', modelo: '', serial: '' }
+                { id: 'bbp1', tipo: 'BBP #1', marca: '', modelo: '', serial: '' }, { id: 'bbp2', tipo: 'BBP #2', marca: '', modelo: '', serial: '' }, { id: 'bbp3', tipo: 'BBP #3', marca: '', modelo: '', serial: '' }, { id: 'bbp4', tipo: 'BBP #4', marca: '', modelo: '', serial: '' }, { id: 'bbp5', tipo: 'BBP #5', marca: '', modelo: '', serial: '' }, { id: 'bbp6', tipo: 'BBP #6', marca: '', modelo: '', serial: '' },
+                { id: 'mpt1', tipo: 'MPT #1', marca: '', modelo: '', serial: '' }, { id: 'mpt2', tipo: 'MPT #2', marca: '', modelo: '', serial: '' }, { id: 'fan',  tipo: 'FAN', marca: '', modelo: '', serial: '' }, { id: 'upeu1', tipo: 'UPEU #1', marca: '', modelo: '', serial: '' }, { id: 'upeu2', tipo: 'UPEU #2', marca: '', modelo: '', serial: '' }
             ],
             energia: {
-                electrificadora: '', nic: '', fases: '', diametroCable: '',
-                transformadorTipo: '', transformadorKw: '', transformadorMarca: '',
-                contadorBreaker: '', contadorA: '', contadorMarca: '',
-                plantaEstado: '', plantaModelo: '', plantaMarca: '', plantaSerial: '', plantaKw: '', plantaPropietario: '',
-                tgdBreaker: '', tgdA: '', tgdMarca: '', 
-                l1A: '', l2A: '', l3A: '',
-                l1nV: '', l2nV: '', l3nV: '',
-                l1l2V: '', l1l3V: '', l2l3V: '',
-                pdbRegleta: '', corrienteTotal: '' 
+                electrificadora: '', nic: '', fases: '', diametroCable: '', transformadorTipo: '', transformadorKw: '', transformadorMarca: '', contadorBreaker: '', contadorA: '', contadorMarca: '',
+                plantaEstado: '', plantaModelo: '', plantaMarca: '', plantaSerial: '', plantaKw: '', plantaPropietario: '', tgdBreaker: '', tgdA: '', tgdMarca: '', 
+                l1A: '', l2A: '', l3A: '', l1nV: '', l2nV: '', l3nV: '', l1l2V: '', l1l3V: '', l2l3V: '', pdbRegleta: '', corrienteTotal: '' 
             },
             materiales: [
-                { id: 'mat1', material: 'CORAZAS', cantidad: '', observaciones: '' },
-                { id: 'mat2', material: 'TERMINALES', cantidad: '', observaciones: '' },
-                { id: 'mat3', material: 'UNIONES', cantidad: '', observaciones: '' },
-                { id: 'mat4', material: 'BREAKER AC', cantidad: '', observaciones: '' },
-                { id: 'mat5', material: 'CABLE AC', cantidad: '', observaciones: '' },
-                { id: 'mat6', material: 'BREAKER DC', cantidad: '', observaciones: '' },
-                { id: 'mat7', material: 'ESTRUCTURAS', cantidad: '', observaciones: '' },
-                { id: 'mat8', material: 'MÁSTILES', cantidad: '', observaciones: '' }
+                { id: 'mat1', material: 'CORAZAS', cantidad: '', observaciones: '' }, { id: 'mat2', material: 'TERMINALES', cantidad: '', observaciones: '' }, { id: 'mat3', material: 'UNIONES', cantidad: '', observaciones: '' }, { id: 'mat4', material: 'BREAKER AC', cantidad: '', observaciones: '' },
+                { id: 'mat5', material: 'CABLE AC', cantidad: '', observaciones: '' }, { id: 'mat6', material: 'BREAKER DC', cantidad: '', observaciones: '' }, { id: 'mat7', material: 'ESTRUCTURAS', cantidad: '', observaciones: '' }, { id: 'mat8', material: 'MÁSTILES', cantidad: '', observaciones: '' }
             ],
             fotos: []
         };
 
-        // ---- COMPONENTE ESCÁNER CON MOTOR OPTIMIZADO PARA TELECOMUNICACIONES ----
+        // ---- MOTOR DE ESCÁNER FULL HD (Optimizado Huawei/ZTE CODE 128) ----
         const BarcodeScannerModal = ({ onScan, onClose }) => {
+            const [errorMsg, setErrorMsg] = useState("");
+            const html5QrCodeRef = useRef(null);
+
             useEffect(() => {
-                // Configuración super optimizada para códigos de barras 1D densos (Code128)
+                // Instanciamos el lector directamente (Sin la UI genérica)
+                html5QrCodeRef.current = new Html5Qrcode("reader");
+                
                 const config = { 
-                    fps: 15, // Más rápido
-                    qrbox: function(viewfinderWidth, viewfinderHeight) {
-                        // Caja panorámica: 95% del ancho de la pantalla, ideal para seriales largos
-                        return { width: viewfinderWidth * 0.95, height: 120 };
-                    },
-                    experimentalFeatures: {
-                        useBarCodeDetectorIfSupported: true // ESTO ES VITAL: Activa el motor de Google Lens nativo en Android
-                    },
-                    rememberLastUsedCamera: true
+                    fps: 15,
+                    // Limitamos para no perder CPU buscando formatos inútiles
+                    formatsToSupport: [ Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE ],
+                    experimentalFeatures: { useBarCodeDetectorIfSupported: true } // Usa Google Lens si el cel lo soporta
                 };
 
-                const html5QrcodeScanner = new Html5QrcodeScanner(
-                    "reader",
+                // Pedimos cámara trasera en ALTA DEFINICIÓN y Autoenfoque
+                const cameraConfig = { 
+                    facingMode: "environment",
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 },
+                    advanced: [{ focusMode: "continuous" }]
+                };
+
+                html5QrCodeRef.current.start(
+                    cameraConfig, 
                     config,
-                    false
-                );
-                
-                html5QrcodeScanner.render((decodedText) => {
-                    // Filtrar limpiezas innecesarias o detecciones falsas
-                    if(decodedText && decodedText.trim().length > 3) {
-                        if (navigator.vibrate) navigator.vibrate(200); // Feedback táctil
-                        onScan(decodedText.trim());
-                        html5QrcodeScanner.clear(); // Apagar cámara
-                    }
-                }, (error) => {
-                    // Silenciar errores continuos de búsqueda de foco
+                    (decodedText) => {
+                        // Filtro de seguridad
+                        if(decodedText && decodedText.trim().length > 3) {
+                            if (navigator.vibrate) navigator.vibrate(200); // Vibración 
+                            try {
+                                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                                const osc = ctx.createOscillator();
+                                osc.type = 'square'; osc.frequency.setValueAtTime(880, ctx.currentTime);
+                                osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime + 0.1);
+                            } catch(e) {}
+                            
+                            onScan(decodedText.trim());
+                        }
+                    },
+                    (errorMessage) => { /* Silenciar advertencias de búsqueda */ }
+                ).catch((err) => {
+                    setErrorMsg("Permite el acceso a la cámara. Si falla, tu navegador puede estar bloqueando el video.");
                 });
 
                 return () => {
-                    html5QrcodeScanner.clear().catch(error => console.error("Error limpiando cámara", error));
+                    if (html5QrCodeRef.current && html5QrCodeRef.current.isScanning) {
+                        html5QrCodeRef.current.stop().catch(e => console.error(e));
+                    }
                 };
             }, []);
 
             return (
-                <div className="fixed inset-0 z-[100] bg-black bg-opacity-90 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative flex flex-col">
-                        <h3 className="font-bold text-lg text-blue-800 text-center mb-1">Escáner de Seriales</h3>
-                        <p className="text-xs text-gray-500 text-center mb-3">
-                            <span className="font-bold text-red-600">TIP:</span> Mantén la cámara a 15-20cm de distancia. Si hay 2 códigos juntos, tapa uno con tu dedo pulgar.
-                        </p>
+                <div className="fixed inset-0 z-[100] bg-black bg-opacity-95 flex flex-col items-center justify-center p-4">
+                    <div className="w-full max-w-md relative flex flex-col">
+                        <div className="bg-white p-3 rounded-t-lg">
+                            <h3 className="font-bold text-lg text-blue-800 text-center">Escáner de Seriales</h3>
+                            <p className="text-xs text-gray-700 text-center font-bold">
+                                📸 ALÉJATE 25cm DEL CÓDIGO PARA QUE ENFOQUE LA CÁMARA
+                            </p>
+                        </div>
                         
-                        <div id="reader" className="w-full rounded overflow-hidden mb-4 min-h-[250px] bg-gray-100"></div>
+                        {errorMsg ? (
+                            <div className="bg-red-100 text-red-700 p-4 text-sm text-center">{errorMsg}</div>
+                        ) : (
+                            <div id="reader" className="w-full min-h-[300px] border-4 border-blue-500 relative">
+                                {/* Línea láser animada */}
+                                <div className="scan-line"></div>
+                            </div>
+                        )}
                         
-                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar</button>
+                        <div className="bg-white p-3 rounded-b-lg">
+                            <button onClick={onClose} className="bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar</button>
+                        </div>
                     </div>
                 </div>
             );
@@ -287,11 +262,9 @@
             const [showExportModal, setShowExportModal] = useState(false);
             const [isGeneratingVPS, setIsGeneratingVPS] = useState(false);
 
-            // Carga inicial
             useEffect(() => {
                 const list = localStorage.getItem('tss_saved_sites_list');
                 if (list) { try { setSavedSitesList(JSON.parse(list)); } catch (e) {} }
-
                 const savedData = localStorage.getItem('tss_draft_v21');
                 if (savedData) {
                     try {
@@ -303,7 +276,6 @@
                 if (window.lucide) window.lucide.createIcons();
             }, [showSavedModal, showExportModal]); 
 
-            // Autoguardado
             useEffect(() => {
                 if (!isInitialLoad) {
                     localStorage.setItem('tss_draft_v21', JSON.stringify(formData));
@@ -390,9 +362,10 @@
                 if (!scannerConfig) return;
                 const { section, rowId, field } = scannerConfig;
                 
-                // Limpiar posibles prefijos raros de Huawei como "(S)" o "1P" si el usuario lo pide
+                // Limpiar posibles prefijos de Huawei
                 let cleanText = decodedText;
                 if(cleanText.startsWith("(S)")) cleanText = cleanText.substring(3).trim();
+                else if (cleanText.startsWith("1P")) cleanText = cleanText.substring(2).trim();
 
                 setFormData(p => {
                     const newData = { ...p };
@@ -403,7 +376,9 @@
                     }
                     return newData;
                 });
-                setScannerConfig(null); // Cierra el modal de escaneo
+                
+                // Cerrar escáner
+                setScannerConfig(null); 
             };
 
             // =========================================================================
@@ -510,7 +485,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label>Nombre (Técnico / Ing)</label><input type="text" value={formData.infoSitio.tecnico} onChange={(e) => handleChangeInfo('tecnico', e.target.value)} /></div>
                             <div><label>Empresa</label><input type="text" value={formData.infoSitio.empresa} onChange={(e) => handleChangeInfo('empresa', e.target.value)} /></div>
-                            <div><label>Número de Contacto</label><input type="tel" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
+                            <div><label>Número de Contacto</label><input type="tel" inputMode="decimal" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
                         </div>
                     </div>
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>App TSS - Reporte de Sitio v2.1 (VPS Ready)</title>
+    <title>App TSS - Reporte de Sitio v2.1 Completo</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- React y ReactDOM -->
@@ -13,9 +13,9 @@
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    <!-- SheetJS (Para backup crudo local) -->
+    <!-- SheetJS para Excel -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <!-- Lector de Código de Barras (Versión Robusta con Selector de Cámara) -->
+    <!-- Lector de Código de Barras Nativo -->
     <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
 
     <style>
@@ -31,11 +31,13 @@
         .section-title { font-size: 1.125rem; font-weight: bold; color: #1e40af; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; margin-bottom: 1rem; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* Contenedor especial para input + boton escaner */
         .input-group { display: flex; gap: 0.25rem; align-items: stretch; }
         
         /* Estilos para el scanner nativo */
-        #reader button { background: #2563eb; color: white; padding: 5px 10px; border-radius: 5px; margin: 5px; font-weight: bold; }
-        #reader select { padding: 5px; border-radius: 5px; margin-bottom: 10px; max-width: 100%; }
+        #reader button { background: #2563eb; color: white; padding: 5px 10px; border-radius: 5px; margin: 5px; font-weight: bold; border:none; }
+        #reader select { padding: 5px; border-radius: 5px; margin-bottom: 10px; max-width: 100%; border: 1px solid #ccc; }
     </style>
 </head>
 <body>
@@ -128,20 +130,38 @@
             fotos: []
         };
 
-        // ---- COMPONENTE ESCÁNER CON SELECTOR DE CÁMARA ----
+        // ---- COMPONENTE ESCÁNER CON MOTOR OPTIMIZADO PARA TELECOMUNICACIONES ----
         const BarcodeScannerModal = ({ onScan, onClose }) => {
             useEffect(() => {
+                // Configuración super optimizada para códigos de barras 1D densos (Code128)
+                const config = { 
+                    fps: 15, // Más rápido
+                    qrbox: function(viewfinderWidth, viewfinderHeight) {
+                        // Caja panorámica: 95% del ancho de la pantalla, ideal para seriales largos
+                        return { width: viewfinderWidth * 0.95, height: 120 };
+                    },
+                    experimentalFeatures: {
+                        useBarCodeDetectorIfSupported: true // ESTO ES VITAL: Activa el motor de Google Lens nativo en Android
+                    },
+                    rememberLastUsedCamera: true
+                };
+
                 const html5QrcodeScanner = new Html5QrcodeScanner(
                     "reader",
-                    { fps: 10, qrbox: {width: 250, height: 100} },
-                    /* verbose= */ false
+                    config,
+                    false
                 );
                 
                 html5QrcodeScanner.render((decodedText) => {
-                    if (navigator.vibrate) navigator.vibrate(200);
-                    onScan(decodedText);
-                    html5QrcodeScanner.clear();
-                }, (error) => {});
+                    // Filtrar limpiezas innecesarias o detecciones falsas
+                    if(decodedText && decodedText.trim().length > 3) {
+                        if (navigator.vibrate) navigator.vibrate(200); // Feedback táctil
+                        onScan(decodedText.trim());
+                        html5QrcodeScanner.clear(); // Apagar cámara
+                    }
+                }, (error) => {
+                    // Silenciar errores continuos de búsqueda de foco
+                });
 
                 return () => {
                     html5QrcodeScanner.clear().catch(error => console.error("Error limpiando cámara", error));
@@ -150,13 +170,15 @@
 
             return (
                 <div className="fixed inset-0 z-[100] bg-black bg-opacity-90 flex flex-col items-center justify-center p-4">
-                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative">
-                        <h3 className="font-bold text-lg text-blue-800 text-center mb-2">Lector de Seriales</h3>
-                        <p className="text-xs text-gray-500 mb-2 text-center">Permite el acceso a la cámara. Si la imagen se ve borrosa, usa el selector para cambiar a otra cámara.</p>
+                    <div className="bg-white p-4 rounded-lg w-full max-w-md shadow-2xl relative flex flex-col">
+                        <h3 className="font-bold text-lg text-blue-800 text-center mb-1">Escáner de Seriales</h3>
+                        <p className="text-xs text-gray-500 text-center mb-3">
+                            <span className="font-bold text-red-600">TIP:</span> Mantén la cámara a 15-20cm de distancia. Si hay 2 códigos juntos, tapa uno con tu dedo pulgar.
+                        </p>
                         
-                        <div id="reader" className="w-full rounded overflow-hidden mb-4"></div>
+                        <div id="reader" className="w-full rounded overflow-hidden mb-4 min-h-[250px] bg-gray-100"></div>
                         
-                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cerrar</button>
+                        <button onClick={onClose} className="mt-2 bg-red-500 text-white px-4 py-3 w-full rounded font-bold uppercase text-sm shadow hover:bg-red-600">Cancelar</button>
                     </div>
                 </div>
             );
@@ -223,29 +245,28 @@
                         
                         <div className="space-y-4">
                             {/* Opcion VPS */}
-                            <div className="border-2 border-green-500 bg-green-50 p-4 rounded-lg">
+                            <div className="border-2 border-green-500 bg-green-50 p-4 rounded-lg opacity-50 cursor-not-allowed">
                                 <h4 className="font-bold text-green-800 flex items-center gap-2 mb-2">
                                     <i data-lucide="server" className="w-5 h-5"></i> 1. Generar Excel Perfecto (VPS)
                                 </h4>
                                 <p className="text-xs text-gray-700 mb-3">
-                                    Envía la información a tu servidor Django. El servidor insertará los datos en la plantilla original con los logos exactos.
+                                    (Próximamente) Envía la información a tu servidor Django. El servidor insertará los datos en la plantilla original con logos.
                                 </p>
-                                <button onClick={onExportVPS} disabled={isGenerating} className={`w-full font-bold py-2 rounded flex items-center justify-center gap-2 shadow transition ${isGenerating ? 'bg-gray-400 text-gray-700 cursor-not-allowed' : 'bg-green-600 text-white hover:bg-green-700'}`}>
-                                    {isGenerating ? <i data-lucide="loader-2" className="w-4 h-4 animate-spin"></i> : <i data-lucide="send" className="w-4 h-4"></i>}
-                                    {isGenerating ? 'Generando en Servidor...' : 'Enviar al Servidor VPS'}
+                                <button disabled className="w-full bg-gray-400 text-white font-bold py-2 rounded flex items-center justify-center gap-2 shadow">
+                                    <i data-lucide="lock" className="w-4 h-4"></i> Esperando conexión VPS
                                 </button>
                             </div>
 
                             {/* Opcion Local */}
-                            <div className="border border-gray-300 p-4 rounded-lg">
-                                <h4 className="font-bold text-gray-700 flex items-center gap-2 mb-2">
+                            <div className="border border-blue-300 p-4 rounded-lg bg-blue-50">
+                                <h4 className="font-bold text-blue-900 flex items-center gap-2 mb-2">
                                     <i data-lucide="file-spreadsheet" className="w-5 h-5"></i> 2. Exportar Borrador (Local)
                                 </h4>
-                                <p className="text-xs text-gray-500 mb-3">
-                                    Crea un Excel de datos planos (Sin logos ni fotos). Útil solo como respaldo local.
+                                <p className="text-xs text-blue-700 mb-3">
+                                    Crea un Excel mapeado en este dispositivo (Sin logos ni fotos). Útil para pruebas inmediatas en campo.
                                 </p>
-                                <button onClick={onExportLocal} className="w-full bg-gray-200 text-gray-800 font-bold py-2 rounded hover:bg-gray-300 flex items-center justify-center gap-2">
-                                    <i data-lucide="download" className="w-4 h-4"></i> Descargar Excel Plano
+                                <button onClick={onExportLocal} className="w-full bg-blue-600 text-white font-bold py-3 rounded hover:bg-blue-700 flex items-center justify-center gap-2 shadow-lg">
+                                    <i data-lucide="download" className="w-5 h-5"></i> Descargar Excel Local
                                 </button>
                             </div>
                         </div>
@@ -368,77 +389,26 @@
             const handleScanResult = (decodedText) => {
                 if (!scannerConfig) return;
                 const { section, rowId, field } = scannerConfig;
+                
+                // Limpiar posibles prefijos raros de Huawei como "(S)" o "1P" si el usuario lo pide
+                let cleanText = decodedText;
+                if(cleanText.startsWith("(S)")) cleanText = cleanText.substring(3).trim();
+
                 setFormData(p => {
                     const newData = { ...p };
                     if (section === 'tarjetas' || section === 'inventarioTorre' || section === 'inventarioPiso') {
-                        newData[section] = newData[section].map(r => r.id === rowId ? { ...r, [field]: decodedText } : r);
+                        newData[section] = newData[section].map(r => r.id === rowId ? { ...r, [field]: cleanText } : r);
                     } else if (section === 'energia') {
-                        newData.energia[field] = decodedText;
+                        newData.energia[field] = cleanText;
                     }
                     return newData;
                 });
-                setScannerConfig(null);
+                setScannerConfig(null); // Cierra el modal de escaneo
             };
 
             // =========================================================================
-            // EXPORTACIONES (VPS vs LOCAL)
+            // EXPORTACIONES LOCAL (PLANO SIN LOGOS PERO CON ESTRUCTURA EXACTA)
             // =========================================================================
-            
-            // 1. Exportación al VPS (La solución profesional para logos y formatos)
-            const handleExportVPS = async () => {
-                const codigo = formData.infoSitio.codigoSitio || 'NUEVO_SITIO';
-                const vpsUrl = prompt("Ingresa la URL de tu API de Django en el VPS:\n(Ej: https://api.tuservidor.com/exportar-tss/)", "http://127.0.0.1:8000/api/exportar-tss/");
-                
-                if (!vpsUrl) return;
-
-                setIsGeneratingVPS(true);
-                
-                try {
-                    // Convertir imágenes a Base64
-                    const toBase64 = file => new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.readAsDataURL(file);
-                        reader.onload = () => resolve(reader.result.split(',')[1]); // Extraer solo la data cruda
-                    });
-
-                    const fotosBase64 = await Promise.all(formData.fotos.map(async f => ({ 
-                        etiqueta: f.etiqueta, 
-                        nombre: f.name, 
-                        base64: await toBase64(f.file) 
-                    })));
-
-                    const payload = { 
-                        data: formData, 
-                        fotos: fotosBase64 
-                    };
-                    
-                    // Petición al backend Django
-                    const response = await fetch(vpsUrl, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify(payload)
-                    });
-
-                    if (!response.ok) throw new Error("Error en el servidor: " + response.statusText);
-                    
-                    // Recibir el archivo Excel procesado por Django
-                    const blob = await response.blob();
-                    const url = window.URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `TSS_PERFECTO_${codigo}.xlsx`;
-                    a.click();
-                    
-                    setShowExportModal(false);
-                } catch(e) {
-                    console.error(e);
-                    alert("Error conectando con el VPS: " + e.message + "\n\nAsegúrate de que tu servidor Django esté corriendo y configurado correctamente con CORS.");
-                } finally {
-                    setIsGeneratingVPS(false);
-                }
-            };
-
-            // 2. Exportación Local Raw (Borrador Plano)
             const handleExportLocal = () => {
                 try {
                     const wb = XLSX.utils.book_new();
@@ -540,7 +510,7 @@
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                             <div><label>Nombre (Técnico / Ing)</label><input type="text" value={formData.infoSitio.tecnico} onChange={(e) => handleChangeInfo('tecnico', e.target.value)} /></div>
                             <div><label>Empresa</label><input type="text" value={formData.infoSitio.empresa} onChange={(e) => handleChangeInfo('empresa', e.target.value)} /></div>
-                            <div><label>Número de Contacto</label><input type="tel" inputMode="decimal" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
+                            <div><label>Número de Contacto</label><input type="tel" value={formData.infoSitio.telefono} onChange={(e) => handleChangeInfo('telefono', e.target.value)} /></div>
                         </div>
                     </div>
 
@@ -551,8 +521,8 @@
                             <div><label>Código Netco</label><input type="text" value={formData.infoSitio.codigoNetco} onChange={(e) => handleChangeInfo('codigoNetco', e.target.value)} /></div>
                             <div className="col-span-2"><label>Nombre del Sitio</label><input type="text" value={formData.infoSitio.nombreSitio} onChange={(e) => handleChangeInfo('nombreSitio', e.target.value)} /></div>
                             <div className="col-span-2"><label>Dirección</label><input type="text" value={formData.infoSitio.direccion} onChange={(e) => handleChangeInfo('direccion', e.target.value)} /></div>
-                            <div><label>Latitud</label><input type="number" inputMode="decimal" step="any" value={formData.infoSitio.latitud} onChange={(e) => handleChangeInfo('latitud', e.target.value)} /></div>
-                            <div><label>Longitud</label><input type="number" inputMode="decimal" step="any" value={formData.infoSitio.longitud} onChange={(e) => handleChangeInfo('longitud', e.target.value)} /></div>
+                            <div><label>Latitud</label><input type="number" step="any" value={formData.infoSitio.latitud} onChange={(e) => handleChangeInfo('latitud', e.target.value)} /></div>
+                            <div><label>Longitud</label><input type="number" step="any" value={formData.infoSitio.longitud} onChange={(e) => handleChangeInfo('longitud', e.target.value)} /></div>
                             <div><label>Departamento</label><input type="text" value={formData.infoSitio.departamento} onChange={(e) => handleChangeInfo('departamento', e.target.value)} /></div>
                             <div><label>Municipio</label><input type="text" value={formData.infoSitio.municipio} onChange={(e) => handleChangeInfo('municipio', e.target.value)} /></div>
                             <div><label>Torrero</label><input type="text" value={formData.infoSitio.torrero} onChange={(e) => handleChangeInfo('torrero', e.target.value)} /></div>
@@ -651,13 +621,13 @@
                                                     </button>
                                                 </div>
                                             </td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs py-1 w-14 bg-yellow-50" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
-                                            <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.azimuth} onChange={e => updateRow(row.id, 'azimuth', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.altura} onChange={e => updateRow(row.id, 'altura', e.target.value)} className="mt-0 text-xs py-1 w-14" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.diametroMW} onChange={e => updateRow(row.id, 'diametroMW', e.target.value)} className="mt-0 text-xs py-1 w-14 bg-yellow-50" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.alto} onChange={e => updateRow(row.id, 'alto', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
+                                            <td className="p-1"><input type="number" step="any" value={row.peso} onChange={e => updateRow(row.id, 'peso', e.target.value)} className="mt-0 text-xs py-1 w-12" /></td>
                                             <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-1 py-1">X</button></td>
                                         </tr>
                                     ))}
@@ -687,7 +657,7 @@
                 const deleteRow = (id) => setFormData(p => ({ ...p, inventarioPiso: p.inventarioPiso.filter(r => r.id !== id) }));
                 
                 const updateTarjeta = (id, field, value) => {
-                    setFormData(p => ({ ...p, tarjetas: p.tarjetas.map(t => t.id === id ? { ...t, [field]: value } : t) }));
+                    setFormData(p => ({ ...p, tarjetas: p.tarjetas.map(t => t.id === id ? { ...t, [field]: value } : t) }) );
                 };
 
                 return (
@@ -720,8 +690,8 @@
                                                 </td>
                                                 <td className="p-1"><input type="text" value={row.fabricante} onChange={e => updateRow(row.id, 'fabricante', e.target.value)} className="mt-0 text-xs py-1 w-20" /></td>
                                                 <td className="p-1"><input type="text" value={row.modelo} onChange={e => updateRow(row.id, 'modelo', e.target.value)} className="mt-0 text-xs py-1 w-24" /></td>
-                                                <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
-                                                <td className="p-1"><input type="number" inputMode="decimal" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
+                                                <td className="p-1"><input type="number" step="any" value={row.prof} onChange={e => updateRow(row.id, 'prof', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
+                                                <td className="p-1"><input type="number" step="any" value={row.ancho} onChange={e => updateRow(row.id, 'ancho', e.target.value)} className="mt-0 text-xs py-1 w-16" /></td>
                                                 <td className="p-1"><input type="text" readOnly value={row.area} className="mt-0 text-xs py-1 bg-gray-100 font-bold w-16" /></td>
                                                 <td className="p-1 text-center"><button onClick={() => deleteRow(row.id)} className="text-red-500 font-bold px-1 py-1">X</button></td>
                                             </tr>
@@ -772,7 +742,7 @@
                         <h2 className="section-title">Transformador</h2>
                         <div className="grid grid-cols-3 gap-3">
                             <div><label>Tipo</label><input type="text" placeholder="Ej: Trifásico" value={formData.energia.transformadorTipo} onChange={(e) => handleChangeEnergia('transformadorTipo', e.target.value)} /></div>
-                            <div><label>Capacidad (KW)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.transformadorKw} onChange={(e) => handleChangeEnergia('transformadorKw', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.transformadorKw} onChange={(e) => handleChangeEnergia('transformadorKw', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.transformadorMarca} onChange={(e) => handleChangeEnergia('transformadorMarca', e.target.value)} /></div>
                         </div>
                     </div>
@@ -781,7 +751,7 @@
                         <h2 className="section-title">Contador & PDB</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.contadorBreaker} onChange={(e) => handleChangeEnergia('contadorBreaker', e.target.value)} /></div>
-                            <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.contadorA} onChange={(e) => handleChangeEnergia('contadorA', e.target.value)} /></div>
                             <div><label>Marca Contador</label><input type="text" value={formData.energia.contadorMarca} onChange={(e) => handleChangeEnergia('contadorMarca', e.target.value)} /></div>
                             <div><label>PDB / Regleta Break</label><input type="text" value={formData.energia.pdbRegleta} onChange={(e) => handleChangeEnergia('pdbRegleta', e.target.value)} /></div>
                         </div>
@@ -799,7 +769,7 @@
                                     <button onClick={() => setScannerConfig({section: 'energia', field: 'plantaSerial'})} className="bg-gray-200 px-2 rounded border border-gray-300"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 5v4"/><path d="M21 5v4"/><path d="M21 15v4"/><path d="M3 15v4"/><path d="M7 5h1"/><path d="M11 5h2"/><path d="M16 5h1"/><path d="M7 19h1"/><path d="M11 19h2"/><path d="M16 19h1"/><path d="M7 9v6"/><path d="M11 9v6"/><path d="M16 9v6"/></svg></button>
                                 </div>
                             </div>
-                            <div><label>Capacidad (KW)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
+                            <div><label>Capacidad (KW)</label><input type="number" step="any" value={formData.energia.plantaKw} onChange={(e) => handleChangeEnergia('plantaKw', e.target.value)} /></div>
                             <div><label>Propietario</label><input type="text" value={formData.energia.plantaPropietario} onChange={(e) => handleChangeEnergia('plantaPropietario', e.target.value)} /></div>
                         </div>
                     </div>
@@ -808,23 +778,23 @@
                         <h2 className="section-title text-green-700">Totalizador TGD y Mediciones</h2>
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 pb-4 border-b">
                             <div><label>Tipo Breaker</label><input type="text" value={formData.energia.tgdBreaker} onChange={(e) => handleChangeEnergia('tgdBreaker', e.target.value)} /></div>
-                            <div><label>Capacidad (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
+                            <div><label>Capacidad (A)</label><input type="number" step="any" value={formData.energia.tgdA} onChange={(e) => handleChangeEnergia('tgdA', e.target.value)} /></div>
                             <div><label>Marca</label><input type="text" value={formData.energia.tgdMarca} onChange={(e) => handleChangeEnergia('tgdMarca', e.target.value)} /></div>
-                            <div><label>Corriente Total (A)</label><input type="number" inputMode="decimal" step="any" value={formData.energia.corrienteTotal} onChange={(e) => handleChangeEnergia('corrienteTotal', e.target.value)} className="bg-yellow-50" /></div>
+                            <div><label>Corriente Total (A)</label><input type="number" step="any" value={formData.energia.corrienteTotal} onChange={(e) => handleChangeEnergia('corrienteTotal', e.target.value)} className="bg-yellow-50" /></div>
                         </div>
                         
                         <div className="grid grid-cols-3 gap-2 text-center text-sm">
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
-                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L1</label><input type="number" step="any" value={formData.energia.l1A} onChange={(e) => handleChangeEnergia('l1A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L2</label><input type="number" step="any" value={formData.energia.l2A} onChange={(e) => handleChangeEnergia('l2A', e.target.value)} /></div>
+                            <div className="bg-gray-50 p-2 rounded"><label className="text-blue-600 block mb-1">Corr (A) L3</label><input type="number" step="any" value={formData.energia.l3A} onChange={(e) => handleChangeEnergia('l3A', e.target.value)} /></div>
                             
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L1-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1nV} onChange={(e) => handleChangeEnergia('l1nV', e.target.value)} /></div>
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L2-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2nV} onChange={(e) => handleChangeEnergia('l2nV', e.target.value)} /></div>
-                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L3-N</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l3nV} onChange={(e) => handleChangeEnergia('l3nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L1-N</label><input type="number" step="any" value={formData.energia.l1nV} onChange={(e) => handleChangeEnergia('l1nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L2-N</label><input type="number" step="any" value={formData.energia.l2nV} onChange={(e) => handleChangeEnergia('l2nV', e.target.value)} /></div>
+                            <div className="bg-blue-50 p-2 rounded mt-2"><label className="text-indigo-700 block mb-1">Volt L3-N</label><input type="number" step="any" value={formData.energia.l3nV} onChange={(e) => handleChangeEnergia('l3nV', e.target.value)} /></div>
                             
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L2</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1l2V} onChange={(e) => handleChangeEnergia('l1l2V', e.target.value)} /></div>
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l1l3V} onChange={(e) => handleChangeEnergia('l1l3V', e.target.value)} /></div>
-                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L2-L3</label><input type="number" inputMode="decimal" step="any" value={formData.energia.l2l3V} onChange={(e) => handleChangeEnergia('l2l3V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L2</label><input type="number" step="any" value={formData.energia.l1l2V} onChange={(e) => handleChangeEnergia('l1l2V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L1-L3</label><input type="number" step="any" value={formData.energia.l1l3V} onChange={(e) => handleChangeEnergia('l1l3V', e.target.value)} /></div>
+                            <div className="bg-green-50 p-2 rounded mt-2"><label className="text-green-700 block mb-1">Volt L2-L3</label><input type="number" step="any" value={formData.energia.l2l3V} onChange={(e) => handleChangeEnergia('l2l3V', e.target.value)} /></div>
                         </div>
                     </div>
                 </div>
@@ -848,7 +818,7 @@
                                     {formData.materiales.map((mat) => (
                                         <tr key={mat.id} className="border-b">
                                             <td className="p-2 font-bold text-gray-700">{mat.material}</td>
-                                            <td className="p-2"><input type="number" inputMode="decimal" value={mat.cantidad} onChange={(e) => updateMaterial(mat.id, 'cantidad', e.target.value)} className="mt-0 py-1" /></td>
+                                            <td className="p-2"><input type="number" value={mat.cantidad} onChange={(e) => updateMaterial(mat.id, 'cantidad', e.target.value)} className="mt-0 py-1" /></td>
                                             <td className="p-2"><input type="text" placeholder="Especificaciones, calibres, etc..." value={mat.observaciones} onChange={(e) => updateMaterial(mat.id, 'observaciones', e.target.value)} className="mt-0 py-1" /></td>
                                         </tr>
                                     ))}
